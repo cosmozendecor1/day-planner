@@ -11,6 +11,12 @@ const save = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } cat
 let state = load(LS_STATE, null) || { tasks: [], targets: [], deleted: {} };
 state.tasks ||= []; state.targets ||= []; state.deleted ||= {};
 let settings = Object.assign({ before: 5, repeats: 3, volume: 0.8, sbUrl: '', sbKey: '', lastSync: 0 }, load(LS_SET, {}));
+// Vinu's Supabase project (public values — access is protected by row-level security)
+const SB_URL = 'https://zylefmxvyorgxjnklgtr.supabase.co';
+const SB_KEY = 'sb_publishable_QiFeAn5V7PBXDLkxMVkBag_q8PO7yoS';
+const APP_URL = 'https://day-planner-cosmo-zen.vercel.app/';
+if (!settings.sbUrl) settings.sbUrl = SB_URL;
+if (!settings.sbKey) settings.sbKey = SB_KEY;
 // alert bookkeeping is per-device (each device should ring), never synced
 let alerts = load(LS_ALERT, { fired: {}, pre: {}, snooze: {} });
 
@@ -587,7 +593,7 @@ $('#sbSignIn').onclick = async () => {
 $('#sbSignUp').onclick = async () => {
   try {
     const { email, pass } = readCreds(); setSync('busy', 'Creating account…');
-    const { data, error } = await sb.auth.signUp({ email, password: pass });
+    const { data, error } = await sb.auth.signUp({ email, password: pass, options: { emailRedirectTo: location.protocol === 'https:' ? location.origin + '/' : APP_URL } });
     if (error) throw error;
     if (data.session) { sbUser = data.user; setSync('ok', 'Account created. Syncing…'); await syncNow(); }
     else setSync('ok', 'Check your email to confirm, then tap Sign in.');

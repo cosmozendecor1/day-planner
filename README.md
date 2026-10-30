@@ -16,27 +16,22 @@ Tip: pin it — right-click the taskbar icon → *Pin to taskbar*.
 
 ## 2. iPhone
 
-The iPhone app needs to be hosted on a web address (HTTPS). Easiest free option, ~2 minutes:
-
-1. On your laptop go to **app.netlify.com/drop** (free account).
-2. Drag the **web** folder onto the page. You'll get a link like `https://something.netlify.app`.
-3. On iPhone, open that link in **Safari** → **Share** → **Add to Home Screen**.
-4. Open Day Planner from the home screen → **Settings → Enable notifications**.
+1. On iPhone, open **https://day-planner-cosmo-zen.vercel.app** in **Safari** → **Share** → **Add to Home Screen**.
+2. Open Day Planner from the home screen → **Settings → Enable notifications**.
 
 **Alarm behaviour on iPhone** (Apple restriction — no app can open itself):
 - App open: full-screen alarm + tinker sound.
 - App closed: tap **📅 Add this day's alarms to Calendar** each morning (or *All upcoming tasks → Calendar* in Settings). The iPhone Calendar then rings at every end time even when the planner is closed.
 
-## 3. Sync between iPhone and laptop (free, one-time)
+## 3. Sync between iPhone and laptop
 
-1. Create a free project at **supabase.com** (New project → any name/password → region Mumbai).
-2. In the project: **SQL Editor → New query**, paste the contents of `supabase-setup.sql`, click **Run**.
-3. **Project Settings → API**: copy the **Project URL** and the **anon public** key.
-4. In Day Planner on each device: **Settings → Sync** → paste URL + key, enter your email and a password.
-   - First device: **Create account** (confirm via the email Supabase sends), then **Sign in**.
-   - Other devices: **Sign in** with the same email/password.
+Sync is built in (Supabase project `day-planner`, Mumbai region, free plan).
 
-Sync runs automatically after every change, every minute, and when the app comes to the front. Each device rings its own alarms. Without sync, everything is stored on the device — use *Export backup* in Settings.
+1. On the first device: **Settings → Sync** → enter your email and a password → **Create account**.
+2. Open the confirmation email from Supabase and tap the link.
+3. Back in the app: **Sign in**. On every other device, just **Sign in** with the same email and password.
+
+Sync runs after every change, every minute, and whenever the app comes to the front. Each device rings its own alarms. Row-level security means each account can only ever read its own planner.
 
 ## How it works
 
