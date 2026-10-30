@@ -193,7 +193,7 @@ function renderToday() {
   $('#emptyTasks').classList.toggle('hidden', list.length > 0);
   const done = list.filter(t => t.done).length;
   $('#dayProgress').textContent = list.length ? `${done}/${list.length} done` : '';
-  $('#icsDay').classList.toggle('hidden', !list.some(t => !t.done && endTs(t) > n));
+  $('#icsDay').classList.toggle('hidden', !!LN || !list.some(t => !t.done && endTs(t) > n));
 }
 
 function renderTargets() {
@@ -214,6 +214,13 @@ function renderTargets() {
 
 function renderSettings() {
   $('#setBefore').value = String(settings.before);
+  if (LN) { // Android app
+    $('#icsAll').closest('.btn-row').classList.add('hidden');
+    $('#enableNotif').classList.remove('hidden'); $('#enableNotif').textContent = 'Allow alarms';
+    $('#notifHint').textContent = 'Alarms ring as Android notifications with the tinker, even when the app is closed. Tap “Allow alarms” once, and allow “Alarms & reminders” if Android asks.';
+    $('#setRepeats').value = String(settings.repeats); $('#setVolume').value = String(settings.volume);
+    return;
+  }
   $('#setRepeats').value = String(settings.repeats);
   $('#setVolume').value = String(settings.volume);
   const hint = $('#notifHint'), btn = $('#enableNotif');
@@ -334,6 +341,10 @@ $('#setRepeats').onchange = e => { settings.repeats = +e.target.value; save(LS_S
 $('#setVolume').oninput = e => { settings.volume = +e.target.value; save(LS_SET, settings); };
 $('#testSound').onclick = () => playTinker(1);
 $('#enableNotif').onclick = async () => {
+  if (LN) {
+    try { nativeReady = null; await nativeInit(); const ex = await LN.checkExactNotificationSetting?.(); if (ex && ex.exact_alarm !== 'granted') await LN.changeExactNotificationSetting(); } catch {}
+    nativeSchedule(); toast('Alarms enabled'); renderSettings(); return;
+  }
   try { await Notification.requestPermission(); } catch {}
   renderSettings();
 };
@@ -466,7 +477,47 @@ $('#alarmSnooze').onclick = () => {
 $('#alarmDismiss').onclick = closeAlarm;
 
 // share upcoming schedule with the Windows desktop shell (it wakes the window even if hidden)
+// Android app (Capacitor): schedule real system notifications so alarms ring even when closed
+const NATIVE = !!window.Capacitor?.isNativePlatform?.();
+const LN = NATIVE && window.Capacitor.registerPlugin ? window.Capacitor.registerPlugin('LocalNotifications') : null;
+const hashId = s => { let h = 7; for (const c of s) h = (h * 31 + c.charCodeAt(0)) | 0; return Math.abs(h % 1000000000) * 2; };
+let nativeReady = null;
+async function nativeInit() {
+  if (!LN) return false;
+  nativeReady ||= (async () => {
+    try {
+      const p = await LN.checkPermissions();
+      if (p.display !== 'granted') await LN.requestPermissions();
+      await LN.createChannel({ id: 'tinker', name: 'Task alarms', description: 'Tinker at task end times', importance: 5, sound: 'tinker.wav', vibration: true, visibility: 1 });
+      LN.addListener?.('localNotificationActionPerformed', () => { checkAlarms(); });
+      return true;
+    } catch { return false; }
+  })();
+  return nativeReady;
+}
+let nativeTimer = null;
+function nativeSchedule() {
+  if (!LN) return;
+  clearTimeout(nativeTimer);
+  nativeTimer = setTimeout(async () => {
+    if (!(await nativeInit())) return;
+    try {
+      const pend = await LN.getPending();
+      if (pend.notifications?.length) await LN.cancel({ notifications: pend.notifications.map(x => ({ id: x.id })) });
+      const n = now(), before = settings.before * 60000, list = [];
+      for (const t of state.tasks.filter(t => !t.done).sort((a, b) => triggerAt(a) - triggerAt(b))) {
+        const at = triggerAt(t); if (at <= n || list.length >= 60) continue;
+        const id = hashId(t.id);
+        list.push({ id, title: `🔔 ${t.title}`, body: `End time reached (${fmtTime(t.end)})`, channelId: 'tinker', sound: 'tinker.wav', schedule: { at: new Date(at), allowWhileIdle: true } });
+        if (before > 0 && at - before > n) list.push({ id: id + 1, title: `⏳ ${t.title}`, body: `Ends in ${settings.before} min (${fmtTime(t.end)})`, channelId: 'tinker', sound: 'tinker.wav', schedule: { at: new Date(at - before), allowWhileIdle: true } });
+      }
+      if (list.length) await LN.schedule({ notifications: list });
+    } catch (e) { console.warn('native schedule failed', e); }
+  }, 400);
+}
+
 function pushSchedule() {
+  nativeSchedule();
   if (!window.desktop?.schedule) return;
   const n = now(), before = settings.before * 60000;
   const items = state.tasks.filter(t => !t.done).map(t => ({ id: t.id, title: t.title, at: triggerAt(t), before }))
@@ -593,7 +644,7 @@ $('#sbSignIn').onclick = async () => {
 $('#sbSignUp').onclick = async () => {
   try {
     const { email, pass } = readCreds(); setSync('busy', 'Creating account…');
-    const { data, error } = await sb.auth.signUp({ email, password: pass, options: { emailRedirectTo: location.protocol === 'https:' ? location.origin + '/' : APP_URL } });
+    const { data, error } = await sb.auth.signUp({ email, password: pass, options: { emailRedirectTo: location.hostname.endsWith('vercel.app') ? location.origin + '/' : APP_URL } });
     if (error) throw error;
     if (data.session) { sbUser = data.user; setSync('ok', 'Account created. Syncing…'); await syncNow(); }
     else setSync('ok', 'Check your email to confirm, then tap Sign in.');
@@ -629,7 +680,7 @@ window.addEventListener('online', () => syncNow());
 // ---------- platform ----------
 function isIOS() { return /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1); }
 function isStandalone() { return matchMedia('(display-mode: standalone)').matches || navigator.standalone === true; }
-if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js').catch(() => {});
+if (!NATIVE && 'serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js').catch(() => {});
 window.desktop?.onAlarmTick?.(() => checkAlarms()); // desktop shell asks us to check right when a task is due
 
 // ---------- start ----------

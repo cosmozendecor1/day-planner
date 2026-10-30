@@ -1,0 +1,12 @@
+{
+  "appId": "com.vinu.dayplanner",
+  "appName": "Day Planner",
+  "webDir": "www",
+  "plugins": {
+    "LocalNotifications": {
+      "smallIcon": "ic_stat_planner",
+      "iconColor": "#F28C38",
+      "sound": "tinker.wav"
+    }
+  }
+}
