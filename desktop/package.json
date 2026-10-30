@@ -1,0 +1,48 @@
+{
+  "name": "day-planner",
+  "productName": "Day Planner",
+  "version": "1.0.0",
+  "description": "Day planner with targets and tinker alarms",
+  "main": "main.js",
+  "author": "Vinu P Sreedharan",
+  "license": "UNLICENSED",
+  "scripts": {
+    "prepare-web": "node -e \"require('fs').cpSync('../web','web',{recursive:true})\"",
+    "start": "npm run prepare-web && electron .",
+    "dist": "npm run prepare-web && electron-builder --win nsis portable"
+  },
+  "devDependencies": {
+    "electron": "^33.4.11",
+    "electron-builder": "^25.1.8"
+  },
+  "build": {
+    "appId": "com.vinu.dayplanner",
+    "productName": "Day Planner",
+    "files": [
+      "main.js",
+      "preload.js",
+      "icon.png",
+      "tray.png",
+      "web/**/*"
+    ],
+    "win": {
+      "icon": "icon.ico",
+      "target": [
+        "nsis",
+        "portable"
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "runAfterFinish": true
+    },
+    "portable": {
+      "artifactName": "DayPlanner-Portable.exe"
+    }
+  },
+  "dependencies": {
+    "@electron/packager": "^20.3.0"
+  }
+}

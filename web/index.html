@@ -1,0 +1,214 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Day Planner</title>
+<meta name="theme-color" content="#1e3a5f">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Planner">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">
+    <img src="icons/icon-192.png" alt="" width="28" height="28">
+    <span>Day Planner</span>
+  </div>
+  <button id="syncBadge" class="sync-badge" title="Sync status" data-state="local">
+    <span class="dot"></span><span id="syncText">On this device</span>
+  </button>
+</header>
+
+<main>
+  <!-- TODAY -->
+  <section id="view-today" class="view active">
+    <div class="day-nav">
+      <button class="icon-btn" id="prevDay" aria-label="Previous day">‹</button>
+      <div class="day-title">
+        <div id="dayLabel" class="day-label">Today</div>
+        <div id="dayDate" class="day-date"></div>
+      </div>
+      <button class="icon-btn" id="nextDay" aria-label="Next day">›</button>
+    </div>
+    <div id="weekStrip" class="week-strip"></div>
+
+    <div id="targetStrip" class="target-strip"></div>
+
+    <div class="list-head">
+      <h2>Tasks</h2>
+      <span id="dayProgress" class="muted"></span>
+    </div>
+    <ul id="taskList" class="task-list"></ul>
+    <div id="emptyTasks" class="empty hidden">
+      <p>No tasks for this day.</p>
+      <p class="muted">Tap <b>+</b> to add one with an end time — you'll hear a tinker when it's due.</p>
+    </div>
+
+    <button id="icsDay" class="ghost-btn wide">📅 Add this day's alarms to Calendar</button>
+  </section>
+
+  <!-- TARGETS -->
+  <section id="view-targets" class="view">
+    <div class="seg" id="periodSeg">
+      <button data-p="week" class="on">Week</button>
+      <button data-p="month">Month</button>
+      <button data-p="quarter">Quarter</button>
+      <button data-p="year">Year</button>
+    </div>
+    <div class="day-nav slim">
+      <button class="icon-btn" id="prevPeriod" aria-label="Previous period">‹</button>
+      <div class="day-title"><div id="periodLabel" class="day-label"></div><div id="periodRange" class="day-date"></div></div>
+      <button class="icon-btn" id="nextPeriod" aria-label="Next period">›</button>
+    </div>
+    <ul id="targetList" class="target-list"></ul>
+    <div id="emptyTargets" class="empty hidden">
+      <p>No targets for this period yet.</p>
+      <p class="muted">Add a target, then link daily tasks to it. Each completed task moves the bar.</p>
+    </div>
+    <button id="addTarget" class="primary-btn wide">+ Add target</button>
+  </section>
+
+  <!-- SETTINGS -->
+  <section id="view-settings" class="view">
+    <div class="card">
+      <h3>Alerts</h3>
+      <label class="row">Open / remind before end
+        <select id="setBefore">
+          <option value="0">At end time only</option>
+          <option value="5">5 min before</option>
+          <option value="10">10 min before</option>
+          <option value="15">15 min before</option>
+          <option value="30">30 min before</option>
+        </select>
+      </label>
+      <label class="row">Tinker repeats
+        <select id="setRepeats">
+          <option value="1">Once</option>
+          <option value="3">3 times</option>
+          <option value="5">5 times</option>
+        </select>
+      </label>
+      <label class="row">Volume <input type="range" id="setVolume" min="0.1" max="1" step="0.1"></label>
+      <div class="btn-row">
+        <button id="testSound" class="ghost-btn">🔔 Test tinker</button>
+        <button id="enableNotif" class="ghost-btn">Enable notifications</button>
+      </div>
+      <p id="notifHint" class="muted small"></p>
+    </div>
+
+    <div class="card">
+      <h3>Sync across devices</h3>
+      <div id="syncOut">
+        <p class="muted small">Uses your free Supabase project. Setup steps are in the README.</p>
+        <label class="stack">Supabase project URL<input id="sbUrl" placeholder="https://xxxx.supabase.co" autocomplete="off"></label>
+        <label class="stack">Supabase anon (public) key<input id="sbKey" placeholder="eyJhbGci…" autocomplete="off"></label>
+        <label class="stack">Email<input id="sbEmail" type="email" autocomplete="username"></label>
+        <label class="stack">Password<input id="sbPass" type="password" autocomplete="current-password"></label>
+        <div class="btn-row">
+          <button id="sbSignIn" class="primary-btn">Sign in</button>
+          <button id="sbSignUp" class="ghost-btn">Create account</button>
+        </div>
+      </div>
+      <div id="syncIn" class="hidden">
+        <p>Signed in as <b id="sbWho"></b></p>
+        <p class="muted small" id="sbLast"></p>
+        <div class="btn-row">
+          <button id="sbSyncNow" class="primary-btn">Sync now</button>
+          <button id="sbSignOut" class="ghost-btn">Sign out</button>
+        </div>
+      </div>
+      <p id="sbMsg" class="small msg"></p>
+    </div>
+
+    <div class="card">
+      <h3>Calendar &amp; backup</h3>
+      <div class="btn-row">
+        <button id="icsAll" class="ghost-btn">📅 All upcoming tasks → Calendar</button>
+      </div>
+      <div class="btn-row">
+        <button id="exportJson" class="ghost-btn">Export backup</button>
+        <label class="ghost-btn file-btn">Import backup<input id="importJson" type="file" accept="application/json"></label>
+      </div>
+    </div>
+    <p class="muted small center">Day Planner v1.0</p>
+  </section>
+</main>
+
+<button id="fab" class="fab" aria-label="Add task">+</button>
+
+<nav class="tabbar">
+  <button data-view="today" class="on"><span>☀️</span>Today</button>
+  <button data-view="targets"><span>🎯</span>Targets</button>
+  <button data-view="settings"><span>⚙️</span>Settings</button>
+</nav>
+
+<!-- Task editor -->
+<dialog id="taskDlg" class="sheet">
+  <form method="dialog" id="taskForm">
+    <h3 id="taskDlgTitle">New task</h3>
+    <label class="stack">Task<input id="tTitle" required maxlength="140" placeholder="e.g. Finish TPRM review deck"></label>
+    <div class="two">
+      <label class="stack">Date<input id="tDate" type="date" required></label>
+      <label class="stack">End time<input id="tEnd" type="time" required></label>
+    </div>
+    <label class="stack">Counts toward target<select id="tTarget"></select></label>
+    <label class="stack">Notes<textarea id="tNotes" rows="2" maxlength="500"></textarea></label>
+    <div class="btn-row spread">
+      <button type="button" id="tDelete" class="danger-btn">Delete</button>
+      <span class="grow"></span>
+      <button type="button" class="ghost-btn" data-close>Cancel</button>
+      <button type="submit" class="primary-btn">Save</button>
+    </div>
+  </form>
+</dialog>
+
+<!-- Target editor -->
+<dialog id="targetDlg" class="sheet">
+  <form method="dialog" id="targetForm">
+    <h3 id="targetDlgTitle">New target</h3>
+    <label class="stack">Target<input id="gTitle" required maxlength="140" placeholder="e.g. Apply to 10 TPRM roles"></label>
+    <div class="two">
+      <label class="stack">Period<select id="gPeriod">
+        <option value="week">Week</option><option value="month">Month</option>
+        <option value="quarter">Quarter</option><option value="year">Year</option>
+      </select></label>
+      <label class="stack">Goal (tasks to complete)<input id="gGoal" type="number" min="1" max="10000" value="5" required></label>
+    </div>
+    <p id="gPeriodHint" class="muted small"></p>
+    <div class="btn-row spread">
+      <button type="button" id="gDelete" class="danger-btn">Delete</button>
+      <span class="grow"></span>
+      <button type="button" class="ghost-btn" data-close>Cancel</button>
+      <button type="submit" class="primary-btn">Save</button>
+    </div>
+  </form>
+</dialog>
+
+<!-- Alarm -->
+<div id="alarm" class="alarm hidden" role="alertdialog" aria-live="assertive">
+  <div class="alarm-card">
+    <div class="alarm-bell">🔔</div>
+    <div id="alarmKind" class="alarm-kind">Time's up</div>
+    <div id="alarmTitle" class="alarm-title"></div>
+    <div id="alarmTime" class="muted"></div>
+    <div class="alarm-btns">
+      <button id="alarmDone" class="primary-btn">✓ Mark done</button>
+      <button id="alarmSnooze" class="ghost-btn">Snooze 5 min</button>
+      <button id="alarmDismiss" class="ghost-btn">Dismiss</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast" class="toast"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.118.0/dist/umd/supabase.js"></script>
+<script>window.supabase || document.write('<script src="vendor/supabase.js"><\/script>')</script>
+<script src="app.js"></script>
+</body>
+</html>

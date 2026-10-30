@@ -1,0 +1,4 @@
+node_modules/
+desktop/web/
+desktop/dist/
+.DS_Store
