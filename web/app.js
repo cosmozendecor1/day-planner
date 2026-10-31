@@ -680,6 +680,36 @@ window.addEventListener('online', () => syncNow());
 // ---------- platform ----------
 function isIOS() { return /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1); }
 function isStandalone() { return matchMedia('(display-mode: standalone)').matches || navigator.standalone === true; }
+// iPhone install guide: shows in-page, tailored to the browser the link was opened in
+function showIOSHelp() {
+  if (!isIOS() || isStandalone() || NATIVE) return;
+  try { if (localStorage.getItem('dp.iosHelpHidden') === '1') return; } catch {}
+  const ua = navigator.userAgent;
+  const otherBrowser = /CriOS|FxiOS|EdgiOS|OPiOS|GSA\//.test(ua);
+  const inApp = /FBAN|FBAV|Instagram|Line\/|WhatsApp|LinkedInApp|Twitter|Snapchat/.test(ua) || (!/Safari\//.test(ua) && !otherBrowser);
+  const body = $('#iosHelpBody');
+  if (otherBrowser || inApp) {
+    body.innerHTML = `<h4>📱 To install, open this page in Safari</h4>
+      <ol><li>Tap <b>Copy link</b> below.</li>
+      <li>Open the <b>Safari</b> app (blue compass icon).</li>
+      <li>Tap the address bar, <b>paste</b>, and tap <b>Go</b>.</li>
+      <li>This box will then show the next steps.</li></ol>
+      <button class="copy" id="iosCopy">Copy link</button>`;
+    $('#iosCopy').onclick = async () => {
+      const url = 'https://day-planner-cosmo-zen.vercel.app/';
+      try { await navigator.clipboard.writeText(url); toast('Link copied — now open Safari'); }
+      catch { prompt('Copy this link, then open it in Safari:', url); }
+    };
+  } else {
+    body.innerHTML = `<h4>📱 Add Day Planner to your iPhone</h4>
+      <ol><li>Tap the <span class="kbd">⬆</span> <b>Share</b> button at the bottom of Safari.<br><span class="muted small">Don't see it? Tap <span class="kbd">•••</span> first, then <b>Share</b>. If the bottom bar is hidden, scroll the page up a little.</span></li>
+      <li>In the panel that opens, <b>swipe up</b> and tap <b>Add to Home Screen</b> <span class="kbd">⊞</span>.<br><span class="muted small">Not listed? Tap <b>More</b> / <b>Edit Actions</b> at the bottom and add it.</span></li>
+      <li>Tap <b>Add</b> (top right).</li>
+      <li>Open <b>Planner</b> from your Home Screen, then Settings → <b>Sign in</b>.</li></ol>`;
+  }
+  $('#iosHelp').classList.remove('hidden');
+}
+$('#iosHelpClose').onclick = () => { $('#iosHelp').classList.add('hidden'); try { localStorage.setItem('dp.iosHelpHidden', '1'); } catch {} };
 if (!NATIVE && 'serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js').catch(() => {});
 window.desktop?.onAlarmTick?.(() => checkAlarms()); // desktop shell asks us to check right when a task is due
 
@@ -690,6 +720,7 @@ renderToday._day = todayStr();
 render();
 showView('today');
 initSync();
+showIOSHelp();
 pushSchedule();
 checkAlarms();
 setInterval(checkAlarms, 5000);

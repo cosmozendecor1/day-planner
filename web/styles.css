@@ -217,3 +217,13 @@ dialog.sheet h3 { margin: 0 0 6px; }
   opacity: 0; pointer-events: none; transition: .25s; z-index: 30; max-width: 90vw;
 }
 .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+.ios-help { position: relative; margin: 10px 16px 0; padding: 14px 40px 14px 14px; background: #fff7ee; border: 2px solid var(--accent); border-radius: 14px; color: #1c2430; font-size: 15px; }
+.ios-help h4 { margin: 0 0 8px; font-size: 16px; }
+.ios-help ol { margin: 0; padding-left: 22px; }
+.ios-help li { margin: 6px 0; }
+.ios-help .kbd { display: inline-block; background: #fff; border: 1px solid #d9d4ca; border-radius: 7px; padding: 0 7px; font-weight: 700; }
+.ios-help .copy { margin-top: 10px; width: 100%; background: var(--accent); color: #fff; border: 0; border-radius: 10px; padding: 11px; font-weight: 700; }
+.ios-x { position: absolute; top: 6px; right: 8px; border: 0; background: none; font-size: 26px; color: #6b7380; line-height: 1; }
+.ios-arrow { position: fixed; left: 50%; bottom: calc(10px + env(safe-area-inset-bottom)); transform: translateX(-50%); z-index: 40; font-size: 34px; animation: bob 1s ease-in-out infinite; pointer-events: none; }
+@keyframes bob { 50% { transform: translateX(-50%) translateY(8px); } }
