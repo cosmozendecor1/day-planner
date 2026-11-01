@@ -250,6 +250,8 @@ function openTask(t) {
   else { const d = new Date(Date.now() + 3600e3); $('#tEnd').value = `${pad(d.getHours())}:00`; }
   $('#tNotes').value = t?.notes || '';
   $('#tDelete').classList.toggle('hidden', !t);
+  $('#tDone').classList.toggle('hidden', !t);
+  if (t) { $('#tDone').textContent = t.done ? '↩ Mark not done' : '✓ Mark done'; $('#tDone').classList.toggle('undo', !!t.done); }
   fillTargetSelect(t?.targetId || '');
   taskDlg.showModal();
   if (!t) setTimeout(() => $('#tTitle').focus(), 50);
@@ -272,6 +274,12 @@ $('#taskForm').addEventListener('submit', e => {
   upsertTask(t); taskDlg.close();
   if (!editingTask) toast(`Tinker set for ${fmtTime(t.end)}`);
   if (t.date !== selDay) { selDay = t.date; render(); }
+});
+$('#tDone').addEventListener('click', () => {
+  if (!editingTask) return;
+  const t = state.tasks.find(x => x.id === editingTask.id); if (!t) return;
+  t.done = !t.done; t.doneAt = t.done ? now() : null; upsertTask(t); taskDlg.close();
+  if (t.done) toast('Nice — done ✓');
 });
 $('#tDelete').addEventListener('click', () => {
   if (editingTask && confirm('Delete this task?')) { removeTask(editingTask.id); taskDlg.close(); }

@@ -120,9 +120,13 @@ main { max-width: 720px; margin: 0 auto; padding: 12px 16px; }
 .task.done .t-title { text-decoration: line-through; color: var(--muted); }
 .task.overdue { border-color: color-mix(in srgb, var(--danger) 55%, var(--line)); }
 .check {
-  flex: 0 0 auto; width: 28px; height: 28px; border-radius: 50%;
-  border: 2px solid var(--line); background: transparent; display: grid; place-items: center; font-size: 15px; color: #fff;
+  flex: 0 0 auto; width: 34px; height: 34px; border-radius: 50%; position: relative;
+  border: 2.5px solid var(--brand); background: transparent; display: grid; place-items: center; font-size: 18px; font-weight: 700; color: #fff;
 }
+.check::after { content: ''; position: absolute; inset: -10px; } /* bigger tap area */
+.task:not(.done) .check::before { content: '✓'; color: var(--brand); opacity: .25; }
+.done-btn { background: var(--ok); color: #fff; }
+.done-btn.undo { background: var(--surface); color: var(--text); border-color: var(--line); }
 .task.done .check { background: var(--ok); border-color: var(--ok); }
 .t-body { flex: 1; min-width: 0; text-align: left; background: none; border: 0; padding: 0; }
 .t-title { font-weight: 600; overflow-wrap: anywhere; }

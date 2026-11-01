@@ -1,5 +1,5 @@
 // Offline app shell. Bump VERSION when files change.
-const VERSION = 'dp-v6';
+const VERSION = 'dp-v7';
 const SHELL = ['./', 'index.html', 'styles.css', 'app.js', 'manifest.webmanifest',
   'icons/icon-192.png', 'icons/apple-touch-icon.png'];
 self.addEventListener('install', e => { e.waitUntil(caches.open(VERSION).then(c => c.addAll(SHELL))); self.skipWaiting(); });

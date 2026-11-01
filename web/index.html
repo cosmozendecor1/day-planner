@@ -51,7 +51,7 @@
     <ul id="taskList" class="task-list"></ul>
     <div id="emptyTasks" class="empty hidden">
       <p>No tasks for this day.</p>
-      <p class="muted">Tap <b>+</b> to add one with an end time — you'll hear a tinker when it's due.</p>
+      <p class="muted">Tap <b>+</b> to add one with an end time. Tap the <b>circle</b> next to a task to mark it done — you'll hear a tinker when it's due.</p>
     </div>
 
     <button id="icsDay" class="ghost-btn wide">📅 Add this day's alarms to Calendar</button>
@@ -164,6 +164,7 @@
     <label class="stack">Counts toward target<select id="tTarget"></select></label>
     <label class="stack">Notes<textarea id="tNotes" rows="2" maxlength="500"></textarea></label>
     <div class="btn-row spread">
+      <button type="button" id="tDone" class="primary-btn done-btn wide">✓ Mark done</button>
       <button type="button" id="tDelete" class="danger-btn">Delete</button>
       <span class="grow"></span>
       <button type="button" class="ghost-btn" data-close>Cancel</button>
