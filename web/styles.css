@@ -124,7 +124,7 @@ main { max-width: 720px; margin: 0 auto; padding: 12px 16px; }
   border: 2.5px solid var(--brand); background: transparent; display: grid; place-items: center; font-size: 18px; font-weight: 700; color: #fff;
 }
 .check::after { content: ''; position: absolute; inset: -10px; } /* bigger tap area */
-.task:not(.done) .check::before { content: '✓'; color: var(--brand); opacity: .25; }
+.task:not(.done):not(.failed) .check::before { content: '✓'; color: var(--brand); opacity: .25; }
 .done-btn { background: var(--ok); color: #fff; }
 .done-btn.undo { background: var(--surface); color: var(--text); border-color: var(--line); }
 .task.done .check { background: var(--ok); border-color: var(--ok); }
@@ -238,3 +238,10 @@ dialog.sheet h3 { margin: 0 0 6px; }
 .t-meta .tag.ext { background: color-mix(in srgb, var(--danger) 14%, transparent); color: var(--text); }
 .ext-task { font-weight: 650; margin: 4px 0 6px; overflow-wrap: anywhere; }
 input:disabled { opacity: .55; }
+
+.task.failed { border-color: color-mix(in srgb, var(--danger) 60%, var(--line)); background: color-mix(in srgb, var(--danger) 6%, var(--surface)); }
+.task.failed .check { background: var(--danger); border-color: var(--danger); }
+.task.failed .t-title { color: var(--muted); }
+.t-meta .fail-tag, .fail-text { color: var(--danger); font-weight: 700; }
+.fail-head h2 { color: var(--danger); }
+.fail-count { display: inline-block; min-width: 22px; padding: 0 7px; border-radius: 99px; background: var(--danger); color: #fff; font-size: 13px; text-align: center; vertical-align: middle; }

@@ -92,7 +92,7 @@ const targetById = id => state.targets.find(g => g.id === id);
 function targetProgress(g) {
   const linked = state.tasks.filter(t => t.targetId === g.id);
   const done = linked.filter(t => t.done).length;
-  return { done, linked: linked.length, pct: Math.min(100, Math.round(done / Math.max(1, g.goal) * 100)) };
+  return { done, failed: linked.filter(t => t.failedAt).length, linked: linked.length, pct: Math.min(100, Math.round(done / Math.max(1, g.goal) * 100)) };
 }
 // targets a task on date s may count toward: the 4 periods that contain s
 const targetsCovering = s => ['week', 'month', 'quarter', 'year'].flatMap(p => targetsFor(p, periodKey(p, s)));
@@ -122,10 +122,22 @@ function removeTarget(id) {
 const hm = d => `${pad(d.getHours())}:${pad(d.getMinutes())}`;
 const shortDate = s => { const d = parseYmd(s); return `${DOW[d.getDay()]} ${d.getDate()} ${MON[d.getMonth()]}`; };
 // Unfinished tasks from earlier days move to today as pending (same end time).
+// A task whose one-time extension (hard deadline) passes without being done is marked FAILED.
+// 5-minute grace so "Mark done" from the deadline alarm still counts.
+const GRACE = 5 * 60000;
+function markFailures() {
+  const n = now(); let changed = 0;
+  for (const t of state.tasks) {
+    if (t.done || t.failedAt || !t.extendedAt) continue;
+    if (n > endTs(t) + GRACE) { t.failedAt = n; t.updatedAt = n; changed++; }
+  }
+  if (changed) { toast(`${changed} task${changed > 1 ? 's' : ''} missed the hard deadline — marked as failed`); commit(); }
+  return changed;
+}
 function carryOver() {
   const t0 = todayStr(); let moved = 0;
   for (const t of state.tasks) {
-    if (t.done || t.date >= t0) continue;
+    if (t.done || t.failedAt || t.extendedAt || t.date >= t0) continue;
     t.carriedFrom ||= t.date;
     t.carryCount = (t.carryCount || 0) + 1;
     t.date = t0; t.updatedAt = now(); moved++;
@@ -189,8 +201,21 @@ function renderToday() {
   }).join('');
   $('#targetStrip').classList.toggle('hidden', !gs.length);
 
-  const list = tasksOn(selDay);
+  const all = tasksOn(selDay);
+  const list = all.filter(t => !t.failedAt), failed = all.filter(t => t.failedAt);
   const n = now();
+  $('#failedList').innerHTML = failed.map(t => {
+    const g = t.targetId && targetById(t.targetId);
+    return `<li class="task failed">
+      <button class="check" data-toggle="${t.id}" aria-label="Failed">✕</button>
+      <button class="t-body" data-edit="${t.id}">
+        <div class="t-title">${esc(t.title)}</div>
+        <div class="t-meta"><span class="fail-tag">✕ Failed · hard deadline ${fmtTime(t.end)} ${shortDate(t.date)} not met</span><span class="tag">originally ${fmtTime(t.origEnd)} ${shortDate(t.origDate)}</span>${g ? `<span class="tag">🎯 ${esc(g.title)}</span>` : ''}</div>
+      </button>
+    </li>`;
+  }).join('');
+  $('#failedSection').classList.toggle('hidden', !failed.length);
+  $('#failedCount').textContent = failed.length;
   $('#taskList').innerHTML = list.map(t => {
     const due = endTs(t) - n;
     const g = t.targetId && targetById(t.targetId);
@@ -209,9 +234,9 @@ function renderToday() {
       <div class="t-time">${fmtTime(t.end)}</div>
     </li>`;
   }).join('');
-  $('#emptyTasks').classList.toggle('hidden', list.length > 0);
+  $('#emptyTasks').classList.toggle('hidden', all.length > 0);
   const done = list.filter(t => t.done).length;
-  $('#dayProgress').textContent = list.length ? `${done}/${list.length} done` : '';
+  $('#dayProgress').textContent = all.length ? `${done}/${all.length} done${failed.length ? ` · ${failed.length} failed` : ''}` : '';
   $('#icsDay').classList.toggle('hidden', !!LN || !list.some(t => !t.done && endTs(t) > n));
 }
 
@@ -225,7 +250,7 @@ function renderTargets() {
     return `<li><button class="target" data-target="${g.id}">
       <div class="row1"><div class="nm">${esc(g.title)}</div><div class="ct">${pr.done} / ${g.goal}</div></div>
       <div class="bar ${pr.pct >= 100 ? 'full' : ''}"><i style="width:${pr.pct}%"></i></div>
-      <div class="sub">${pr.pct >= 100 ? '🎉 Target achieved' : `${pr.pct}% · ${pr.linked} task${pr.linked === 1 ? '' : 's'} linked`}</div>
+      <div class="sub">${pr.pct >= 100 ? '🎉 Target achieved' : `${pr.pct}% · ${pr.linked} task${pr.linked === 1 ? '' : 's'} linked`}${pr.failed ? ` · <span class="fail-text">${pr.failed} failed</span>` : ''}</div>
     </button></li>`;
   }).join('');
   $('#emptyTargets').classList.toggle('hidden', gs.length > 0);
@@ -269,12 +294,13 @@ function openTask(t) {
   else { const d = new Date(Date.now() + 3600e3); $('#tEnd').value = `${pad(d.getHours())}:00`; }
   $('#tNotes').value = t?.notes || '';
   $('#tDelete').classList.toggle('hidden', !t);
-  $('#tDone').classList.toggle('hidden', !t);
+  $('#tDone').classList.toggle('hidden', !t || !!t.failedAt);
   const locked = !!t?.extendedAt;
   $('#tExtend').classList.toggle('hidden', !t || t.done || locked);
   $('#tDate').disabled = locked; $('#tEnd').disabled = locked;
   $('#tLocked').classList.toggle('hidden', !locked);
-  if (locked) $('#tLocked').textContent = `⏱ Hard deadline set (extended once from ${fmtTime(t.origEnd)}, ${shortDate(t.origDate)}). Date and time can't be changed again.`;
+  if (t?.failedAt) $('#tLocked').textContent = `✕ Failed — the hard deadline (${fmtTime(t.end)}, ${shortDate(t.date)}) passed before it was done.`;
+  else if (locked) $('#tLocked').textContent = `⏱ Hard deadline set (extended once from ${fmtTime(t.origEnd)}, ${shortDate(t.origDate)}). Date and time can't be changed again.`;
   if (t) { $('#tDone').textContent = t.done ? '↩ Mark not done' : '✓ Mark done'; $('#tDone').classList.toggle('undo', !!t.done); }
   fillTargetSelect(t?.targetId || '');
   taskDlg.showModal();
@@ -301,7 +327,7 @@ $('#taskForm').addEventListener('submit', e => {
 });
 $('#tDone').addEventListener('click', () => {
   if (!editingTask) return;
-  const t = state.tasks.find(x => x.id === editingTask.id); if (!t) return;
+  const t = state.tasks.find(x => x.id === editingTask.id); if (!t || t.failedAt) return;
   t.done = !t.done; t.doneAt = t.done ? now() : null; upsertTask(t); taskDlg.close();
   if (t.done) toast('Nice — done ✓');
 });
@@ -352,7 +378,8 @@ document.addEventListener('click', e => {
   if (!el) return;
   if (el.dataset.toggle) {
     const t = state.tasks.find(x => x.id === el.dataset.toggle);
-    if (t) { t.done = !t.done; t.doneAt = t.done ? now() : null; upsertTask(t); if (t.done) toast('Nice — done ✓'); }
+    if (t?.failedAt) toast('This task missed its hard deadline and is marked as failed');
+    else if (t) { t.done = !t.done; t.doneAt = t.done ? now() : null; upsertTask(t); if (t.done) toast('Nice — done ✓'); }
   } else if (el.dataset.edit) openTask(state.tasks.find(x => x.id === el.dataset.edit));
   else if (el.dataset.day) { selDay = el.dataset.day; renderToday(); }
   else if (el.dataset.target) openTarget(targetById(el.dataset.target));
@@ -456,10 +483,11 @@ function notify(title, body, tag) {
 function triggerAt(t) { return alerts.snooze[t.id] || endTs(t); }
 
 function checkAlarms() {
+  markFailures();
   const n = now(), before = settings.before * 60000;
   let dirty = false;
   for (const t of state.tasks) {
-    if (t.done) continue;
+    if (t.done || t.failedAt) continue;
     const at = triggerAt(t);
     const key = t.id + '@' + at;
     // pre-alert: open the app before the end time
@@ -485,7 +513,7 @@ function showAlarm(id) {
   const t = state.tasks.find(x => x.id === id);
   if (!t || t.done) { alarmShowing = null; if (alarmQueue.length) showAlarm(alarmQueue.shift()); return; }
   alarmShowing = id;
-  $('#alarmKind').textContent = alerts.snooze[id] ? 'Snooze over' : "Time's up";
+  $('#alarmKind').textContent = t.extendedAt ? 'Hard deadline — mark done within 5 min or it fails' : alerts.snooze[id] ? 'Snooze over' : "Time's up";
   $('#alarmTitle').textContent = t.title;
   $('#alarmTime').textContent = `End time ${fmtTime(t.end)}${t.extendedAt ? ' · hard deadline (already extended)' : ''}`;
   $('#alarmExtend').classList.toggle('hidden', !!t.extendedAt);
@@ -500,7 +528,7 @@ function closeAlarm() {
 }
 $('#alarmDone').onclick = () => {
   const t = state.tasks.find(x => x.id === alarmShowing);
-  if (t) { t.done = true; t.doneAt = now(); delete alerts.snooze[t.id]; save(LS_ALERT, alerts); upsertTask(t); }
+  if (t && !t.failedAt) { t.done = true; t.doneAt = now(); delete alerts.snooze[t.id]; save(LS_ALERT, alerts); upsertTask(t); }
   closeAlarm();
 };
 $('#alarmSnooze').onclick = () => {
