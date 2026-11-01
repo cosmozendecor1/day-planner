@@ -234,3 +234,7 @@ dialog.sheet h3 { margin: 0 0 6px; }
 
 .t-meta .done-tag { color: var(--ok); font-weight: 700; }
 .t-meta .tag.carry { background: color-mix(in srgb, var(--accent) 18%, transparent); color: var(--text); }
+
+.t-meta .tag.ext { background: color-mix(in srgb, var(--danger) 14%, transparent); color: var(--text); }
+.ext-task { font-weight: 650; margin: 4px 0 6px; overflow-wrap: anywhere; }
+input:disabled { opacity: .55; }

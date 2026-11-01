@@ -165,6 +165,8 @@
     <label class="stack">Notes<textarea id="tNotes" rows="2" maxlength="500"></textarea></label>
     <div class="btn-row spread">
       <button type="button" id="tDone" class="primary-btn done-btn wide">✓ Mark done</button>
+      <button type="button" id="tExtend" class="ghost-btn wide">⏱ Extend deadline (once)</button>
+      <p id="tLocked" class="muted small hidden"></p>
       <button type="button" id="tDelete" class="danger-btn">Delete</button>
       <span class="grow"></span>
       <button type="button" class="ghost-btn" data-close>Cancel</button>
@@ -195,6 +197,25 @@
   </form>
 </dialog>
 
+<!-- Extend deadline -->
+<dialog id="extDlg" class="sheet">
+  <form method="dialog" id="extForm">
+    <h3>⏱ Extend deadline</h3>
+    <p id="extTask" class="ext-task"></p>
+    <p class="muted small">Pick a new date and end time. This becomes a <b>hard deadline</b> — you can extend each task only once.</p>
+    <div class="two">
+      <label class="stack">New date<input id="eDate" type="date" required></label>
+      <label class="stack">New end time<input id="eEnd" type="time" required></label>
+    </div>
+    <p id="extErr" class="small msg err"></p>
+    <div class="btn-row spread">
+      <span class="grow"></span>
+      <button type="button" class="ghost-btn" data-close>Cancel</button>
+      <button type="submit" class="primary-btn">Set hard deadline</button>
+    </div>
+  </form>
+</dialog>
+
 <!-- Alarm -->
 <div id="alarm" class="alarm hidden" role="alertdialog" aria-live="assertive">
   <div class="alarm-card">
@@ -204,6 +225,7 @@
     <div id="alarmTime" class="muted"></div>
     <div class="alarm-btns">
       <button id="alarmDone" class="primary-btn">✓ Mark done</button>
+      <button id="alarmExtend" class="ghost-btn">⏱ Extend deadline (once)</button>
       <button id="alarmSnooze" class="ghost-btn">Snooze 5 min</button>
       <button id="alarmDismiss" class="ghost-btn">Dismiss</button>
     </div>

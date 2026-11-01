@@ -199,6 +199,7 @@ function renderToday() {
     else if (!t.done && due < 0) status = '<span class="late">missed</span>';
     if (t.done) status = `<span class="done-tag">✓ Completed${t.doneAt ? ' ' + fmtTime(hm(new Date(t.doneAt))) : ''}</span>`;
     if (t.carriedFrom && !t.done) status += `<span class="tag carry">↪ Moved from ${shortDate(t.carriedFrom)}</span>`;
+    if (t.extendedAt && !t.done) status += `<span class="tag ext">⏱ Hard deadline · was ${fmtTime(t.origEnd)} ${shortDate(t.origDate)}</span>`;
     return `<li class="task ${t.done ? 'done' : ''} ${!t.done && due < 0 ? 'overdue' : ''}">
       <button class="check" data-toggle="${t.id}" aria-label="${t.done ? 'Mark not done' : 'Mark done'}">${t.done ? '✓' : ''}</button>
       <button class="t-body" data-edit="${t.id}">
@@ -269,6 +270,11 @@ function openTask(t) {
   $('#tNotes').value = t?.notes || '';
   $('#tDelete').classList.toggle('hidden', !t);
   $('#tDone').classList.toggle('hidden', !t);
+  const locked = !!t?.extendedAt;
+  $('#tExtend').classList.toggle('hidden', !t || t.done || locked);
+  $('#tDate').disabled = locked; $('#tEnd').disabled = locked;
+  $('#tLocked').classList.toggle('hidden', !locked);
+  if (locked) $('#tLocked').textContent = `⏱ Hard deadline set (extended once from ${fmtTime(t.origEnd)}, ${shortDate(t.origDate)}). Date and time can't be changed again.`;
   if (t) { $('#tDone').textContent = t.done ? '↩ Mark not done' : '✓ Mark done'; $('#tDone').classList.toggle('undo', !!t.done); }
   fillTargetSelect(t?.targetId || '');
   taskDlg.showModal();
@@ -481,7 +487,8 @@ function showAlarm(id) {
   alarmShowing = id;
   $('#alarmKind').textContent = alerts.snooze[id] ? 'Snooze over' : "Time's up";
   $('#alarmTitle').textContent = t.title;
-  $('#alarmTime').textContent = `End time ${fmtTime(t.end)}`;
+  $('#alarmTime').textContent = `End time ${fmtTime(t.end)}${t.extendedAt ? ' · hard deadline (already extended)' : ''}`;
+  $('#alarmExtend').classList.toggle('hidden', !!t.extendedAt);
   $('#alarm').classList.remove('hidden');
   window.desktop?.alarm({ title: t.title, kind: 'end' });
   notify(`🔔 ${t.title}`, `End time reached (${fmtTime(t.end)})`, 'end-' + t.id);
@@ -501,6 +508,38 @@ $('#alarmSnooze').onclick = () => {
   toast('Snoozed 5 minutes'); closeAlarm();
 };
 $('#alarmDismiss').onclick = closeAlarm;
+
+// ---------- extend deadline (once, hard) ----------
+const extDlg = $('#extDlg'); let extId = null, extFromAlarm = false;
+extDlg.addEventListener('click', e => { if (e.target === extDlg) extDlg.close(); });
+extDlg.querySelector('[data-close]').addEventListener('click', () => extDlg.close());
+function openExtend(id, fromAlarm) {
+  const t = state.tasks.find(x => x.id === id);
+  if (!t || t.done) return;
+  if (t.extendedAt) { toast('This task was already extended once — the deadline is fixed'); return; }
+  extId = id; extFromAlarm = !!fromAlarm;
+  $('#extTask').textContent = `${t.title} — now due ${fmtTime(t.end)}, ${shortDate(t.date)}`;
+  const base = Math.max(endTs(t), now()) + 3600e3; const d = new Date(base);
+  $('#eDate').value = ymd(d); $('#eDate').min = todayStr(); $('#eEnd').value = hm(d);
+  $('#extErr').textContent = '';
+  extDlg.showModal();
+}
+$('#extForm').addEventListener('submit', e => {
+  e.preventDefault();
+  const t = state.tasks.find(x => x.id === extId); if (!t || t.extendedAt) { extDlg.close(); return; }
+  const nd = $('#eDate').value, ne = $('#eEnd').value;
+  const at = endTs({ date: nd, end: ne });
+  if (!nd || !ne || at <= now() || at <= endTs(t)) { $('#extErr').textContent = 'Choose a time later than now and later than the current deadline.'; return; }
+  if (!confirm(`Set the hard deadline to ${fmtTime(ne)}, ${shortDate(nd)}? You won't be able to extend this task again.`)) return;
+  t.origDate = t.date; t.origEnd = t.end; t.extendedAt = now();
+  t.date = nd; t.end = ne;
+  delete alerts.fired[t.id]; delete alerts.pre[t.id]; delete alerts.snooze[t.id]; save(LS_ALERT, alerts);
+  upsertTask(t); extDlg.close(); taskDlg.open && taskDlg.close();
+  if (extFromAlarm) closeAlarm();
+  toast(`Hard deadline set: ${fmtTime(ne)}, ${shortDate(nd)}`);
+});
+$('#tExtend').onclick = () => editingTask && openExtend(editingTask.id, false);
+$('#alarmExtend').onclick = () => alarmShowing && openExtend(alarmShowing, true);
 
 // share upcoming schedule with the Windows desktop shell (it wakes the window even if hidden)
 // Android app (Capacitor): schedule real system notifications so alarms ring even when closed
