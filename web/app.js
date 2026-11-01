@@ -147,6 +147,78 @@ function carryOver() {
   return moved;
 }
 
+// ---------- hero: greeting, sun progress, purpose path ----------
+const CHEERS = [
+  'Big goals are built one small win at a time.',
+  "Today is a good day to move something forward.",
+  'Do the next small thing. Then the next one.',
+  "You've got this. One task at a time.",
+  'Small steps today, big wins this month.',
+  'Make today count. Your future self is cheering.',
+  'Progress, not perfection.',
+];
+const DONE_CHEERS = ['Nice — done ✓', 'Boom! One more down 💥', 'Look at you go 🚀', 'Ticked! Keep the streak going ⚡', 'Done and dusted ✨', 'That felt good, right? 😄'];
+function renderHero() {
+  const h = new Date().getHours();
+  const part = h < 5 ? 'Up early' : h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening';
+  const name = (settings.name || '').trim();
+  $('#greet').textContent = `${part}${name ? ', ' + name : ''} ${h < 17 ? '☀️' : '🌙'}`;
+  const all = tasksOn(selDay), live = all.filter(t => !t.failedAt), done = live.filter(t => t.done).length;
+  const total = all.length, pct = total ? done / total : 0;
+  let cheer;
+  if (!total) cheer = selDay === todayStr() ? 'A clean slate. Add the first task that makes today great.' : 'Nothing planned for this day yet.';
+  else if (done === total) cheer = 'Day won! Everything is done 🎉';
+  else if (pct >= .5) cheer = `Over halfway there — ${total - done} to go. Keep rolling!`;
+  else if (done > 0) cheer = `Off to a great start. ${total - done} more and the day is yours.`;
+  else cheer = CHEERS[(parseYmd(selDay).getDate() + total) % CHEERS.length];
+  $('#cheer').textContent = cheer;
+  $('#sunDone').textContent = done; $('#sunOf').innerHTML = `of ${total}<br>done`;
+  const C = 2 * Math.PI * 38;
+  $('#sunFill').style.strokeDasharray = `${C}`;
+  $('#sunFill').style.strokeDashoffset = `${C * (1 - pct)}`;
+  const lit = Math.round(pct * 12);
+  $('#rays').innerHTML = Array.from({ length: 12 }, (_, i) => {
+    const a = (i / 12) * 2 * Math.PI - Math.PI / 2, r1 = 48, r2 = 57;
+    return `<line x1="${60 + r1 * Math.cos(a)}" y1="${60 + r1 * Math.sin(a)}" x2="${60 + r2 * Math.cos(a)}" y2="${60 + r2 * Math.sin(a)}" class="${i < lit ? 'on' : ''}"/>`;
+  }).join('');
+  $('#sun').classList.toggle('won', total > 0 && done === total);
+  $('#sun').setAttribute('aria-label', `${done} of ${total} tasks done`);
+  // purpose path: today -> week -> month -> quarter -> year
+  const steps = [{ p: 'day', label: 'Today', icon: '☀️', d: done, g: total }];
+  for (const [p, icon, label] of [['week', '🌱', 'Week'], ['month', '🌿', 'Month'], ['quarter', '🌳', 'Quarter'], ['year', '🏔️', 'Year']]) {
+    const gs = targetsFor(p, periodKey(p, selDay));
+    const d = gs.reduce((a, g) => a + Math.min(g.goal, targetProgress(g).done), 0), g = gs.reduce((a, g) => a + g.goal, 0);
+    steps.push({ p, label, icon, d, g, none: !gs.length });
+  }
+  $('#path').innerHTML = steps.map((st, i) => `${i ? '<span class="path-link" aria-hidden="true"></span>' : ''}<button class="path-step ${st.none ? 'none' : ''} ${st.g && st.d >= st.g ? 'full' : ''}" data-path="${st.p}">
+      <span class="path-icon">${st.icon}</span><span class="path-label">${st.label}</span>
+      <span class="path-val">${st.none ? 'Set goal' : `${st.d}/${st.g}`}</span>
+      <span class="path-bar"><i style="width:${st.g ? Math.min(100, st.d / st.g * 100) : 0}%"></i></span>
+    </button>`).join('');
+}
+const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+function confetti(x, y, big) {
+  if (reduceMotion) return;
+  const colors = ['#FF8A3D', '#FFC93C', '#2EC4A0', '#FF5F8F', '#6C7BFF'];
+  const n = big ? 60 : 16;
+  for (let i = 0; i < n; i++) {
+    const el = document.createElement('i'); el.className = 'confetti';
+    el.style.left = x + 'px'; el.style.top = y + 'px'; el.style.background = colors[i % colors.length];
+    const ang = Math.random() * Math.PI * 2, dist = (big ? 160 : 70) + Math.random() * (big ? 160 : 50);
+    el.style.setProperty('--dx', Math.cos(ang) * dist + 'px'); el.style.setProperty('--dy', Math.sin(ang) * dist - (big ? 80 : 30) + 'px');
+    el.style.setProperty('--r', Math.random() * 720 - 360 + 'deg');
+    document.body.appendChild(el); setTimeout(() => el.remove(), 1100);
+  }
+}
+function celebrate(fromEl) {
+  const r = fromEl?.getBoundingClientRect?.();
+  confetti(r ? r.left + r.width / 2 : innerWidth / 2, r ? r.top + r.height / 2 : innerHeight / 2, false);
+  const day = tasksOn(selDay).filter(t => !t.failedAt);
+  if (day.length && day.every(t => t.done)) {
+    setTimeout(() => { const s = $('#sun').getBoundingClientRect(); confetti(s.left + s.width / 2, s.top + s.height / 2, true); toast('Day won! Everything is done 🎉'); }, 250);
+  } else toast(DONE_CHEERS[Math.floor(Math.random() * DONE_CHEERS.length)]);
+}
+
 // ---------- UI state ----------
 const $ = s => document.querySelector(s);
 const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -170,6 +242,7 @@ function showView(v) {
 
 // ---------- render ----------
 function render() {
+  renderHero();
   renderToday(); renderTargets(); renderSettings(); renderSyncBadge();
 }
 
@@ -257,6 +330,7 @@ function renderTargets() {
 }
 
 function renderSettings() {
+  if (document.activeElement !== $('#setName')) $('#setName').value = settings.name || '';
   $('#setBefore').value = String(settings.before);
   if (LN) { // Android app
     $('#icsAll').closest('.btn-row').classList.add('hidden');
@@ -329,7 +403,7 @@ $('#tDone').addEventListener('click', () => {
   if (!editingTask) return;
   const t = state.tasks.find(x => x.id === editingTask.id); if (!t || t.failedAt) return;
   t.done = !t.done; t.doneAt = t.done ? now() : null; upsertTask(t); taskDlg.close();
-  if (t.done) toast('Nice — done ✓');
+  if (t.done) celebrate(document.querySelector(`[data-toggle="${t.id}"]`));
 });
 $('#tDelete').addEventListener('click', () => {
   if (editingTask && confirm('Delete this task?')) { removeTask(editingTask.id); taskDlg.close(); }
@@ -374,21 +448,23 @@ document.querySelectorAll('[data-close]').forEach(b => b.addEventListener('click
 
 // ---------- events ----------
 document.addEventListener('click', e => {
+  const pth = e.target.closest('[data-path]');
+  if (pth) { if (pth.dataset.path !== 'day') { selPeriod = pth.dataset.path; periodAnchor = selDay; showView('targets'); } return; }
   const el = e.target.closest('[data-toggle],[data-edit],[data-day],[data-target],[data-view],[data-p]');
   if (!el) return;
   if (el.dataset.toggle) {
     const t = state.tasks.find(x => x.id === el.dataset.toggle);
     if (t?.failedAt) toast('This task missed its hard deadline and is marked as failed');
-    else if (t) { t.done = !t.done; t.doneAt = t.done ? now() : null; upsertTask(t); if (t.done) toast('Nice — done ✓'); }
+    else if (t) { t.done = !t.done; t.doneAt = t.done ? now() : null; upsertTask(t); if (t.done) celebrate(document.querySelector(`[data-toggle="${t.id}"]`)); }
   } else if (el.dataset.edit) openTask(state.tasks.find(x => x.id === el.dataset.edit));
-  else if (el.dataset.day) { selDay = el.dataset.day; renderToday(); }
+  else if (el.dataset.day) { selDay = el.dataset.day; renderHero(); renderToday(); }
   else if (el.dataset.target) openTarget(targetById(el.dataset.target));
   else if (el.dataset.view) showView(el.dataset.view);
   else if (el.dataset.p) { selPeriod = el.dataset.p; renderTargets(); }
 });
-$('#prevDay').onclick = () => { selDay = addDays(selDay, -1); renderToday(); };
-$('#nextDay').onclick = () => { selDay = addDays(selDay, 1); renderToday(); };
-$('#dayLabel').onclick = () => { selDay = todayStr(); renderToday(); };
+$('#prevDay').onclick = () => { selDay = addDays(selDay, -1); renderHero(); renderToday(); };
+$('#nextDay').onclick = () => { selDay = addDays(selDay, 1); renderHero(); renderToday(); };
+$('#dayLabel').onclick = () => { selDay = todayStr(); renderHero(); renderToday(); };
 $('#prevPeriod').onclick = () => { periodAnchor = periodShift(selPeriod, periodAnchor, -1); renderTargets(); };
 $('#nextPeriod').onclick = () => { periodAnchor = periodShift(selPeriod, periodAnchor, 1); renderTargets(); };
 $('#periodLabel').onclick = () => { periodAnchor = todayStr(); renderTargets(); };
@@ -396,6 +472,7 @@ $('#fab').onclick = () => $('#fab').dataset.mode === 'target' ? openTarget() : o
 $('#addTarget').onclick = () => openTarget();
 
 $('#setBefore').onchange = e => { settings.before = +e.target.value; save(LS_SET, settings); pushSchedule(); };
+$('#setName').oninput = e => { settings.name = e.target.value.slice(0, 30); save(LS_SET, settings); renderHero(); };
 $('#setRepeats').onchange = e => { settings.repeats = +e.target.value; save(LS_SET, settings); };
 $('#setVolume').oninput = e => { settings.volume = +e.target.value; save(LS_SET, settings); };
 $('#testSound').onclick = () => playTinker(1);
@@ -528,7 +605,7 @@ function closeAlarm() {
 }
 $('#alarmDone').onclick = () => {
   const t = state.tasks.find(x => x.id === alarmShowing);
-  if (t && !t.failedAt) { t.done = true; t.doneAt = now(); delete alerts.snooze[t.id]; save(LS_ALERT, alerts); upsertTask(t); }
+  if (t && !t.failedAt) { t.done = true; t.doneAt = now(); delete alerts.snooze[t.id]; save(LS_ALERT, alerts); upsertTask(t); setTimeout(() => celebrate(document.querySelector(`[data-toggle="${t.id}"]`)), 300); }
   closeAlarm();
 };
 $('#alarmSnooze').onclick = () => {
