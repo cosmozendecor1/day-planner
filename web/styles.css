@@ -231,3 +231,6 @@ dialog.sheet h3 { margin: 0 0 6px; }
 .ios-x { position: absolute; top: 6px; right: 8px; border: 0; background: none; font-size: 26px; color: #6b7380; line-height: 1; }
 .ios-arrow { position: fixed; left: 50%; bottom: calc(10px + env(safe-area-inset-bottom)); transform: translateX(-50%); z-index: 40; font-size: 34px; animation: bob 1s ease-in-out infinite; pointer-events: none; }
 @keyframes bob { 50% { transform: translateX(-50%) translateY(8px); } }
+
+.t-meta .done-tag { color: var(--ok); font-weight: 700; }
+.t-meta .tag.carry { background: color-mix(in srgb, var(--accent) 18%, transparent); color: var(--text); }

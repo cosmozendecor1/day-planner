@@ -119,6 +119,22 @@ function removeTarget(id) {
   state.deleted[id] = now(); commit();
 }
 
+const hm = d => `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+const shortDate = s => { const d = parseYmd(s); return `${DOW[d.getDay()]} ${d.getDate()} ${MON[d.getMonth()]}`; };
+// Unfinished tasks from earlier days move to today as pending (same end time).
+function carryOver() {
+  const t0 = todayStr(); let moved = 0;
+  for (const t of state.tasks) {
+    if (t.done || t.date >= t0) continue;
+    t.carriedFrom ||= t.date;
+    t.carryCount = (t.carryCount || 0) + 1;
+    t.date = t0; t.updatedAt = now(); moved++;
+    delete alerts.fired[t.id]; delete alerts.pre[t.id]; delete alerts.snooze[t.id];
+  }
+  if (moved) { save(LS_ALERT, alerts); save(LS_STATE, state); toast(`${moved} unfinished task${moved > 1 ? 's' : ''} moved to today`); }
+  return moved;
+}
+
 // ---------- UI state ----------
 const $ = s => document.querySelector(s);
 const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -181,6 +197,8 @@ function renderToday() {
     let status = '';
     if (!t.done && selDay === t0) status = due < 0 ? `<span class="late">${relTime(due)}</span>` : due < 3600e3 ? `<span class="due-soon">${relTime(due)}</span>` : `<span>${relTime(due)}</span>`;
     else if (!t.done && due < 0) status = '<span class="late">missed</span>';
+    if (t.done) status = `<span class="done-tag">✓ Completed${t.doneAt ? ' ' + fmtTime(hm(new Date(t.doneAt))) : ''}</span>`;
+    if (t.carriedFrom && !t.done) status += `<span class="tag carry">↪ Moved from ${shortDate(t.carriedFrom)}</span>`;
     return `<li class="task ${t.done ? 'done' : ''} ${!t.done && due < 0 ? 'overdue' : ''}">
       <button class="check" data-toggle="${t.id}" aria-label="${t.done ? 'Mark not done' : 'Mark done'}">${t.done ? '✓' : ''}</button>
       <button class="t-body" data-edit="${t.id}">
@@ -621,15 +639,15 @@ function makeClient(url, key) {
   return window.supabase.createClient(url, key, { auth: { persistSession: true, autoRefreshToken: true, storageKey: 'dp.auth' } });
 }
 async function initSync() {
-  if (!settings.sbUrl || !settings.sbKey) return;
+  if (!settings.sbUrl || !settings.sbKey) { if (carryOver()) commit(); return; }
   try {
     sb = makeClient(settings.sbUrl, settings.sbKey);
     const { data } = await sb.auth.getSession();
     sbUser = data.session?.user || null;
     sb.auth.onAuthStateChange((_e, session) => { sbUser = session?.user || null; renderSyncBadge(); });
     renderSyncBadge();
-    if (sbUser) syncNow();
-  } catch (e) { setSync('err', e.message); }
+    if (sbUser) syncNow(); else if (carryOver()) commit();
+  } catch (e) { setSync('err', e.message); if (carryOver()) commit(); }
 }
 function readCreds() {
   const url = $('#sbUrl').value.trim().replace(/\/+$/, ''), key = $('#sbKey').value.trim();
@@ -668,8 +686,9 @@ async function syncNow(verbose) {
     const { data, error } = await sb.from('planner').select('data').eq('user_id', sbUser.id).maybeSingle();
     if (error) throw error;
     const merged = data?.data ? merge(state, data.data) : state;
-    const changedLocal = JSON.stringify(merged) !== JSON.stringify(state);
+    let changedLocal = JSON.stringify(merged) !== JSON.stringify(state);
     state = merged; save(LS_STATE, state);
+    if (carryOver()) changedLocal = true;
     const { error: e2 } = await sb.from('planner').upsert({ user_id: sbUser.id, data: state, updated_at: new Date().toISOString() });
     if (e2) throw e2;
     settings.lastSync = now(); save(LS_SET, settings);
@@ -682,7 +701,7 @@ async function syncNow(verbose) {
 }
 function syncSoon() { if (!sbUser) return; clearTimeout(syncTimer); syncTimer = setTimeout(syncNow, 1500); }
 setInterval(() => syncNow(), 60000);
-document.addEventListener('visibilitychange', () => { if (!document.hidden) { syncNow(); checkAlarms(); } });
+document.addEventListener('visibilitychange', () => { if (!document.hidden) { if (sbUser) syncNow(); else if (carryOver()) commit(); checkAlarms(); } });
 window.addEventListener('online', () => syncNow());
 
 // ---------- platform ----------
@@ -723,7 +742,7 @@ window.desktop?.onAlarmTick?.(() => checkAlarms()); // desktop shell asks us to 
 
 // ---------- start ----------
 // roll the selected day over at midnight
-setInterval(() => { const t = todayStr(); if (renderToday._day && renderToday._day !== t && selDay === renderToday._day) selDay = t; renderToday._day = t; }, 30000);
+setInterval(() => { const t = todayStr(); if (renderToday._day && renderToday._day !== t) { if (selDay === renderToday._day) selDay = t; if (sbUser) syncNow(); else if (carryOver()) commit(); } renderToday._day = t; }, 30000);
 renderToday._day = todayStr();
 render();
 showView('today');
