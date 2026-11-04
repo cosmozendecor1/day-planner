@@ -273,7 +273,7 @@ input:disabled { opacity: .55; }
 .fab:active { transform: scale(.92) rotate(90deg); }
 .tabbar {
   position: fixed; bottom: 0; left: 0; right: 0; z-index: 6;
-  display: grid; grid-template-columns: repeat(3, 1fr);
+  display: grid; grid-template-columns: repeat(4, 1fr);
   background: var(--surface); box-shadow: 0 -6px 20px -14px rgba(35,48,94,.4);
   padding: 7px 0 calc(7px + env(safe-area-inset-bottom));
   border-radius: 22px 22px 0 0;
@@ -335,3 +335,33 @@ dialog.sheet h3 { margin: 0 0 6px; font-size: 22px; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
 }
+
+/* ---------- CosmoZen Launch Board ---------- */
+.lb-head { margin: 4px 0 12px; }
+.lb-title { margin: 0 0 2px; font-size: 22px; }
+.lb-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 12px; }
+.lb-stat { background: var(--surface); border-radius: 14px; padding: 10px 6px; text-align: center; box-shadow: var(--shadow); }
+.lb-stat b { display: block; font: 700 22px var(--display); font-variant-numeric: tabular-nums; }
+.lb-stat span { font-size: 10px; white-space: nowrap; font-weight: 800; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+.lb-stat.s-done b { color: var(--ok); } .lb-stat.s-wip b { color: #C98200; } .lb-stat.s-blocked b { color: var(--danger); }
+.lb-seg { margin-bottom: 14px; }
+.lb-group { background: var(--surface); border-radius: var(--radius); padding: 6px 14px 4px; margin-bottom: 12px; box-shadow: var(--shadow); }
+.lb-group > summary { list-style: none; display: flex; justify-content: space-between; align-items: baseline; gap: 10px; padding: 10px 0; cursor: pointer; font-family: var(--display); font-weight: 600; font-size: 17px; }
+.lb-group > summary::-webkit-details-marker { display: none; }
+.lb-group .cnt { font: 700 12px var(--body); color: var(--muted); white-space: nowrap; }
+.lb-item { display: flex; gap: 10px; align-items: flex-start; padding: 10px 0; border-top: 1px solid var(--line); }
+.lb-pill { flex-shrink: 0; border: 0; border-radius: 999px; padding: 5px 10px; font: 800 11px var(--body); text-transform: uppercase; letter-spacing: .03em; min-width: 92px; }
+.lb-pill.done { background: #DDF5EE; color: #0E7C66; }
+.lb-pill.wip { background: #FFF1D1; color: #8A5A00; }
+.lb-pill.blocked { background: #FFE3E4; color: #B3262B; }
+@media (prefers-color-scheme: dark) {
+  .lb-pill.done { background: #12372F; color: #6FE0C2; } .lb-pill.wip { background: #3A2E0E; color: #F0C05E; } .lb-pill.blocked { background: #3B1917; color: #FF9C93; }
+}
+.lb-body { flex: 1; min-width: 0; text-align: left; background: none; border: 0; padding: 0; }
+.lb-t { font-weight: 800; line-height: 1.35; }
+.lb-n { font-size: 13px; color: var(--muted); margin-top: 2px; line-height: 1.4; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.lb-item.open .lb-n { -webkit-line-clamp: unset; display: block; }
+.lb-tags { margin-top: 4px; display: flex; gap: 6px; flex-wrap: wrap; }
+.lb-plan { flex-shrink: 0; border: 0; background: var(--surface-2); border-radius: 12px; padding: 6px 9px; font-size: 16px; }
+.t-tag-lb { background: var(--surface-2); border-radius: 8px; padding: 1px 7px; font-size: 12px; font-weight: 800; }
+@media (max-width: 440px) { .lb-pill { min-width: 0; } }

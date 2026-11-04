@@ -4,6 +4,7 @@
 'use strict';
 
 // ---------- storage ----------
+const LS_BOARD = 'dp.board.v1';
 const LS_STATE = 'dp.state.v1', LS_SET = 'dp.settings.v1', LS_ALERT = 'dp.alerts.v1';
 const load = (k, d) => { try { const v = JSON.parse(localStorage.getItem(k)); return v ?? d; } catch { return d; } };
 const save = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} };
@@ -101,6 +102,8 @@ function upsertTask(t) {
   t.updatedAt = now();
   const i = state.tasks.findIndex(x => x.id === t.id);
   if (i >= 0) state.tasks[i] = t; else state.tasks.push(t);
+  // Integration: finishing a planner task updates its Launch Board item
+  if (t.boardId && !boardBusy) boardFromPlanner(t.boardId, !!t.done, t.id);
   commit();
 }
 function removeTask(id) {
@@ -234,7 +237,7 @@ function toast(msg) {
 function showView(v) {
   document.querySelectorAll('.view').forEach(el => el.classList.toggle('active', el.id === 'view-' + v));
   document.querySelectorAll('.tabbar button').forEach(b => b.classList.toggle('on', b.dataset.view === v));
-  $('#fab').classList.toggle('hidden', v === 'settings');
+  $('#fab').classList.toggle('hidden', v === 'settings' || v === 'launch');
   $('#fab').dataset.mode = v === 'targets' ? 'target' : 'task';
   $('#fab').setAttribute('aria-label', v === 'targets' ? 'Add target' : 'Add task');
   render();
@@ -243,7 +246,7 @@ function showView(v) {
 // ---------- render ----------
 function render() {
   renderHero();
-  renderToday(); renderTargets(); renderSettings(); renderSyncBadge();
+  renderToday(); renderTargets(); renderLaunch(); renderSettings(); renderSyncBadge();
 }
 
 function relTime(ms) {
@@ -302,7 +305,7 @@ function renderToday() {
       <button class="check" data-toggle="${t.id}" aria-label="${t.done ? 'Mark not done' : 'Mark done'}">${t.done ? '✓' : ''}</button>
       <button class="t-body" data-edit="${t.id}">
         <div class="t-title">${esc(t.title)}</div>
-        <div class="t-meta">${status}${g ? `<span class="tag">🎯 ${esc(g.title)}</span>` : ''}${t.notes ? '<span>📝</span>' : ''}</div>
+        <div class="t-meta">${status}${g ? `<span class="tag">🎯 ${esc(g.title)}</span>` : ''}${t.boardId && boardById(t.boardId) ? '<span class="tag">🚀 Launch Board</span>' : ''}${t.notes ? '<span>📝</span>' : ''}</div>
       </button>
       <div class="t-time">${fmtTime(t.end)}</div>
     </li>`;
@@ -356,8 +359,8 @@ function renderSettings() {
 }
 
 // ---------- editors ----------
-const taskDlg = $('#taskDlg'), targetDlg = $('#targetDlg');
-let editingTask = null, editingTarget = null;
+const taskDlg = $('#taskDlg'), targetDlg = $('#targetDlg'), boardDlg = $('#boardDlg');
+let editingTask = null, editingTarget = null, pendingBoardId = '';
 
 function openTask(t) {
   editingTask = t || null;
@@ -377,6 +380,7 @@ function openTask(t) {
   else if (locked) $('#tLocked').textContent = `⏱ Hard deadline set (extended once from ${fmtTime(t.origEnd)}, ${shortDate(t.origDate)}). Date and time can't be changed again.`;
   if (t) { $('#tDone').textContent = t.done ? '↩ Mark not done' : '✓ Mark done'; $('#tDone').classList.toggle('undo', !!t.done); }
   fillTargetSelect(t?.targetId || '');
+  fillBoardSelect(t?.boardId || pendingBoardId || ''); pendingBoardId = '';
   taskDlg.showModal();
   if (!t) setTimeout(() => $('#tTitle').focus(), 50);
 }
@@ -393,6 +397,7 @@ $('#taskForm').addEventListener('submit', e => {
   t.title = $('#tTitle').value.trim();
   t.date = $('#tDate').value; t.end = $('#tEnd').value;
   t.targetId = $('#tTarget').value; t.notes = $('#tNotes').value.trim();
+  t.boardId = $('#tBoard').value;
   if (!t.title) return;
   if (changedTime) { delete alerts.fired[t.id]; delete alerts.pre[t.id]; delete alerts.snooze[t.id]; save(LS_ALERT, alerts); }
   upsertTask(t); taskDlg.close();
@@ -444,12 +449,14 @@ $('#gDelete').addEventListener('click', () => {
   if (editingTarget && confirm('Delete this target? Linked tasks are kept.')) { removeTarget(editingTarget.id); targetDlg.close(); }
 });
 document.querySelectorAll('[data-close]').forEach(b => b.addEventListener('click', () => b.closest('dialog').close()));
-[taskDlg, targetDlg].forEach(d => d.addEventListener('click', e => { if (e.target === d) d.close(); }));
+[taskDlg, targetDlg, boardDlg].forEach(d => d.addEventListener('click', e => { if (e.target === d) d.close(); }));
 
 // ---------- events ----------
 document.addEventListener('click', e => {
   const pth = e.target.closest('[data-path]');
   if (pth) { if (pth.dataset.path !== 'day') { selPeriod = pth.dataset.path; periodAnchor = selDay; showView('targets'); } return; }
+  const lb = e.target.closest('[data-lbstatus],[data-lbopen],[data-lbplan],[data-lbedit]');
+  if (lb) return lbClick(lb);
   const el = e.target.closest('[data-toggle],[data-edit],[data-day],[data-target],[data-view],[data-p]');
   if (!el) return;
   if (el.dataset.toggle) {
@@ -747,6 +754,154 @@ $('#importJson').onchange = async e => {
   e.target.value = '';
 };
 
+
+// ---------- CosmoZen Launch Board (table: dashboard_tasks, same Supabase login) ----------
+let board = load(LS_BOARD, []);       // [{id, group_title, group_order, group_live, task_order, status, title, note, deleted, updated_at, _dirty}]
+let boardBusy = false, lbFilter = 'open';
+const ST_LABEL = { done: 'Done', wip: 'In progress', blocked: 'Blocked' };
+const ST_NEXT = { wip: 'done', done: 'blocked', blocked: 'wip' };
+const boardLive = () => board.filter(b => !b.deleted);
+const boardById = id => board.find(b => b.id === id && !b.deleted);
+const lbSave = () => save(LS_BOARD, board);
+
+function boardRow(b) {
+  return { id: b.id, user_id: sbUser.id, group_title: b.group_title, group_order: b.group_order || 0, group_live: b.group_live || '',
+    task_order: b.task_order || 0, status: b.status, title: b.title, note: b.note || '', deleted: !!b.deleted, updated_at: b.updated_at };
+}
+async function pushBoard() {
+  if (!sb || !sbUser) return;
+  const dirty = board.filter(b => b._dirty);
+  if (!dirty.length) return;
+  const { error } = await sb.from('dashboard_tasks').upsert(dirty.map(boardRow));
+  if (error) throw error;
+  dirty.forEach(b => delete b._dirty); lbSave();
+}
+async function loadBoard() {
+  if (!sb || !sbUser) return;
+  try {
+    await pushBoard();
+    const { data, error } = await sb.from('dashboard_tasks').select('*').order('group_order').order('task_order');
+    if (error) throw error;
+    const local = new Map(board.filter(b => b._dirty).map(b => [b.id, b]));
+    board = data.map(r => local.get(r.id) || r);
+    for (const [id, b] of local) if (!board.some(x => x.id === id)) board.push(b);
+    lbSave(); renderLaunch();
+  } catch (e) { const el = $('#lbSub'); if (el) el.textContent = 'Board sync issue: ' + (e.message || e); }
+}
+function lbTouch(b) { b.updated_at = new Date().toISOString(); b._dirty = true; lbSave(); renderLaunch(); renderToday(); pushBoard().catch(() => {}); }
+
+// planner → board
+function boardFromPlanner(id, done, taskId) {
+  const b = boardById(id); if (!b) return;
+  if (done && b.status !== 'done') { b.status = 'done'; lbTouch(b); }
+  else if (!done && b.status === 'done' && !state.tasks.some(x => x.boardId === id && x.id !== taskId && x.done)) { b.status = 'wip'; lbTouch(b); }
+}
+// board → planner (marks linked, not-failed tasks done / not done)
+function setBoardStatus(b, status) {
+  b.status = status; lbTouch(b);
+  boardBusy = true;
+  try {
+    for (const t of state.tasks) {
+      if (t.boardId !== b.id || t.failedAt) continue;
+      const want = status === 'done';
+      if (!!t.done !== want) { t.done = want; t.doneAt = want ? now() : null; upsertTask(t); }
+    }
+  } finally { boardBusy = false; }
+}
+
+function renderLaunch() {
+  const el = $('#lbGroups'); if (!el) return;
+  const live = boardLive();
+  const c = { done: 0, wip: 0, blocked: 0 };
+  live.forEach(b => c[b.status]++);
+  $('#lbStats').innerHTML = `<div class="lb-stat s-done"><b>${c.done}</b><span>Done</span></div><div class="lb-stat s-wip"><b>${c.wip}</b><span>In progress</span></div><div class="lb-stat s-blocked"><b>${c.blocked}</b><span>Blocked</span></div><div class="lb-stat"><b>${live.length}</b><span>Total</span></div>`;
+  document.querySelectorAll('#lbFilter button').forEach(x => x.classList.toggle('on', x.dataset.f === lbFilter));
+  $('#lbEmpty').classList.toggle('hidden', live.length > 0);
+  $('#lbAdd').classList.toggle('hidden', !sbUser && !live.length);
+  $('#lbSub').textContent = live.length ? `${c.done} of ${live.length} done${board.some(b => b._dirty) ? ' · saving…' : ''}` : '';
+  const keep = b => lbFilter === 'all' || (lbFilter === 'open' ? b.status !== 'done' : b.status === lbFilter);
+  const groups = new Map();
+  for (const b of live) { if (!groups.has(b.group_title)) groups.set(b.group_title, { order: b.group_order || 0, live: b.group_live, items: [] }); groups.get(b.group_title).items.push(b); }
+  const openG = load('dp.lbOpen', null);
+  el.innerHTML = [...groups.entries()].sort((a, b) => a[1].order - b[1].order).map(([name, g]) => {
+    const items = g.items.filter(keep).sort((a, b) => (a.task_order || 0) - (b.task_order || 0));
+    if (!items.length) return '';
+    const done = g.items.filter(b => b.status === 'done').length;
+    const isOpen = openG ? openG.includes(name) : true;
+    return `<details class="lb-group" data-g="${esc(name)}" ${isOpen ? 'open' : ''}>
+      <summary><span>${esc(name)}</span><span class="cnt">${done}/${g.items.length} done</span></summary>
+      ${items.map(b => {
+        const linked = state.tasks.filter(t => t.boardId === b.id && !t.failedAt);
+        const nxt = linked.filter(t => !t.done).sort((x, y) => (x.date + x.end).localeCompare(y.date + y.end))[0];
+        return `<div class="lb-item" data-id="${b.id}">
+          <button class="lb-pill ${b.status}" data-lbstatus="${b.id}" aria-label="Change status">${ST_LABEL[b.status]}</button>
+          <button class="lb-body" data-lbopen="${b.id}">
+            <div class="lb-t">${esc(b.title)}</div>
+            ${b.note ? `<div class="lb-n">${esc(b.note)}</div>` : ''}
+            ${nxt ? `<div class="lb-tags"><span class="t-tag-lb">📅 ${shortDate(nxt.date)} · ${fmtTime(nxt.end)}</span></div>` : ''}
+          </button>
+          <button class="lb-plan" data-lbplan="${b.id}" aria-label="Plan in my day" title="Plan in my day">📅</button>
+        </div>`;
+      }).join('')}
+    </details>`;
+  }).join('') || (live.length ? '<div class="empty"><p>Nothing here.</p></div>' : '');
+}
+document.addEventListener('toggle', e => {
+  const d = e.target; if (!d.classList?.contains('lb-group')) return;
+  const open = [...document.querySelectorAll('.lb-group[open]')].map(x => x.dataset.g); save('dp.lbOpen', open);
+}, true);
+
+function lbClick(el) {
+  if (el.dataset.lbstatus) { const b = boardById(el.dataset.lbstatus); if (b) { setBoardStatus(b, ST_NEXT[b.status]); if (b.status === 'done') celebrate(el); } }
+  else if (el.dataset.lbopen) { const row = el.closest('.lb-item'); row.classList.toggle('open'); }
+  else if (el.dataset.lbplan) planBoard(boardById(el.dataset.lbplan));
+  else if (el.dataset.lbedit) openBoard(boardById(el.dataset.lbedit));
+}
+// long-press / double-click a title to edit
+document.addEventListener('dblclick', e => { const b = e.target.closest('.lb-body'); if (b) openBoard(boardById(b.dataset.lbopen)); });
+$('#lbFilter').addEventListener('click', e => { const b = e.target.closest('button[data-f]'); if (b) { lbFilter = b.dataset.f; renderLaunch(); } });
+
+function planBoard(b) {
+  if (!b) return;
+  pendingBoardId = b.id; selDay = selDay || todayStr();
+  openTask(null);
+  $('#tTitle').value = b.title; $('#tDate').value = todayStr();
+  showView('today');
+}
+function fillBoardSelect(cur) {
+  const items = boardLive().filter(b => b.status !== 'done' || b.id === cur);
+  $('#tBoard').innerHTML = '<option value="">— None —</option>' + items.map(b => `<option value="${b.id}" ${b.id === cur ? 'selected' : ''}>${esc(b.group_title)}: ${esc(b.title.slice(0, 70))}</option>`).join('');
+  $('#tBoard').closest('label').classList.toggle('hidden', !boardLive().length);
+}
+let editingBoard = null;
+function openBoard(b) {
+  editingBoard = b || null;
+  $('#boardDlgTitle').textContent = b ? 'Edit board item' : 'New board item';
+  $('#bTitle').value = b?.title || ''; $('#bGroup').value = b?.group_title || '';
+  $('#bStatus').value = b?.status || 'wip'; $('#bNote').value = b?.note || '';
+  $('#bGroupList').innerHTML = [...new Set(boardLive().map(x => x.group_title))].map(g => `<option value="${esc(g)}">`).join('');
+  $('#bDelete').classList.toggle('hidden', !b); $('#bPlan').classList.toggle('hidden', !b);
+  boardDlg.showModal();
+}
+$('#lbAdd').onclick = () => openBoard();
+$('#bPlan').onclick = () => { const b = editingBoard; boardDlg.close(); planBoard(b); };
+$('#bDelete').onclick = () => { if (editingBoard && confirm('Delete this board item?')) { editingBoard.deleted = true; lbTouch(editingBoard); boardDlg.close(); } };
+$('#boardForm').addEventListener('submit', e => {
+  e.preventDefault();
+  const title = $('#bTitle').value.trim(), group = $('#bGroup').value.trim(); if (!title || !group) return;
+  let b = editingBoard;
+  if (!b) {
+    const sib = boardLive().filter(x => x.group_title === group);
+    b = { id: 'u' + uid(), group_title: group, group_order: sib[0]?.group_order ?? (Math.max(0, ...board.map(x => x.group_order || 0)) + 1),
+      group_live: sib[0]?.group_live || '', task_order: Math.max(0, ...sib.map(x => x.task_order || 0)) + 1, deleted: false };
+    board.push(b);
+  } else if (b.group_title !== group) { const sib = boardLive().filter(x => x.group_title === group); b.group_title = group; b.group_order = sib[0]?.group_order ?? b.group_order; b.group_live = sib[0]?.group_live || ''; }
+  b.title = title; b.note = $('#bNote').value.trim();
+  const st = $('#bStatus').value;
+  if (st !== b.status) { b.status = st; setBoardStatus(b, st); } else { b.status ||= st; lbTouch(b); }
+  boardDlg.close();
+});
+
 // ---------- sync (Supabase) ----------
 function mergeList(a = [], b = [], deleted) {
   const m = new Map();
@@ -820,7 +975,7 @@ $('#sbSignUp').onclick = async () => {
     else setSync('ok', 'Check your email to confirm, then tap Sign in.');
   } catch (e) { setSync('err', e.message || String(e)); }
 };
-$('#sbSignOut').onclick = async () => { try { await sb?.auth.signOut(); } catch {} sbUser = null; setSync('local', 'Signed out. Your data stays on this device.'); };
+$('#sbSignOut').onclick = async () => { try { await sb?.auth.signOut(); } catch {} sbUser = null; board = []; save(LS_BOARD, board); render(); setSync('local', 'Signed out. Your data stays on this device.'); };
 $('#sbSyncNow').onclick = () => syncNow(true);
 
 async function syncNow(verbose) {
@@ -836,6 +991,7 @@ async function syncNow(verbose) {
     const { error: e2 } = await sb.from('planner').upsert({ user_id: sbUser.id, data: state, updated_at: new Date().toISOString() });
     if (e2) throw e2;
     settings.lastSync = now(); save(LS_SET, settings);
+    await loadBoard();
     setSync('ok', verbose ? 'Synced ✓' : undefined);
     if (changedLocal) { render(); pushSchedule(); } else renderSyncBadge();
   } catch (e) {

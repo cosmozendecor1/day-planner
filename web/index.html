@@ -81,6 +81,24 @@
     <button id="icsDay" class="ghost-btn wide">📅 Add this day's alarms to Calendar</button>
   </section>
 
+  <!-- LAUNCH BOARD (CosmoZen) -->
+  <section id="view-launch" class="view">
+    <div class="lb-head">
+      <h2 class="lb-title">CosmoZen Launch Board</h2>
+      <p id="lbSub" class="muted small"></p>
+    </div>
+    <div class="lb-stats" id="lbStats"></div>
+    <div class="seg lb-seg" id="lbFilter">
+      <button data-f="open" class="on">Open</button>
+      <button data-f="blocked">Blocked</button>
+      <button data-f="done">Done</button>
+      <button data-f="all">All</button>
+    </div>
+    <div id="lbGroups"></div>
+    <div id="lbEmpty" class="empty hidden"><p>Sign in under Settings to load the Launch Board.</p><p class="muted">It uses the same login as your planner.</p></div>
+    <button id="lbAdd" class="primary-btn wide">+ Add board item</button>
+  </section>
+
   <!-- TARGETS -->
   <section id="view-targets" class="view">
     <div class="seg" id="periodSeg">
@@ -169,7 +187,7 @@
         <label class="ghost-btn file-btn">Import backup<input id="importJson" type="file" accept="application/json"></label>
       </div>
     </div>
-    <p class="muted small center">Day Planner v1.0</p>
+    <p class="muted small center">Day Planner v1.1 · with CosmoZen Launch Board</p>
   </section>
 </main>
 
@@ -177,6 +195,7 @@
 
 <nav class="tabbar">
   <button data-view="today" class="on"><span>☀️</span>Today</button>
+  <button data-view="launch"><span>🚀</span>Launch</button>
   <button data-view="targets"><span>🎯</span>Targets</button>
   <button data-view="settings"><span>⚙️</span>Settings</button>
 </nav>
@@ -191,6 +210,7 @@
       <label class="stack">End time<input id="tEnd" type="time" required></label>
     </div>
     <label class="stack">Counts toward target<select id="tTarget"></select></label>
+    <label class="stack">Launch Board item (finishing this task updates the board)<select id="tBoard"></select></label>
     <label class="stack">Notes<textarea id="tNotes" rows="2" maxlength="500"></textarea></label>
     <div class="btn-row spread">
       <button type="button" id="tDone" class="primary-btn done-btn wide">✓ Mark done</button>
@@ -219,6 +239,24 @@
     <p id="gPeriodHint" class="muted small"></p>
     <div class="btn-row spread">
       <button type="button" id="gDelete" class="danger-btn">Delete</button>
+      <span class="grow"></span>
+      <button type="button" class="ghost-btn" data-close>Cancel</button>
+      <button type="submit" class="primary-btn">Save</button>
+    </div>
+  </form>
+</dialog>
+
+<!-- Board item editor -->
+<dialog id="boardDlg" class="sheet">
+  <form method="dialog" id="boardForm">
+    <h3 id="boardDlgTitle">Board item</h3>
+    <label class="stack">Title<input id="bTitle" required maxlength="200"></label>
+    <label class="stack">Section<input id="bGroup" list="bGroupList" required maxlength="80"><datalist id="bGroupList"></datalist></label>
+    <label class="stack">Status<select id="bStatus"><option value="wip">In progress</option><option value="done">Done</option><option value="blocked">Blocked</option></select></label>
+    <label class="stack">Note<textarea id="bNote" rows="4" maxlength="1500"></textarea></label>
+    <div class="btn-row spread">
+      <button type="button" id="bPlan" class="ghost-btn wide">📅 Plan it in my day</button>
+      <button type="button" id="bDelete" class="danger-btn">Delete</button>
       <span class="grow"></span>
       <button type="button" class="ghost-btn" data-close>Cancel</button>
       <button type="submit" class="primary-btn">Save</button>
