@@ -39,4 +39,17 @@ body:has(#view-launch.active) #fab { display: none; }
 @media (max-width: 420px) { .l-stats { grid-template-columns: repeat(2, 1fr); } .l-pill { min-width: 82px; font-size: 10.5px; } }
 
 /* four tabs now: Today, Targets, Launch, Settings */
-.tabbar { grid-template-columns: repeat(4, 1fr); }
+.tabbar { grid-template-columns: repeat(5, 1fr); }
+.tabbar button { font-size: 11px; }
+/* Music tab */
+body:has(#view-music.active) #fab { display: none; }
+.m-hero { text-align: center; }
+.m-ico { font-size: 44px; line-height: 1; margin-bottom: 10px; }
+.m-open { display: block; text-decoration: none; }
+.m-chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.m-chip { text-decoration: none; padding: 8px 14px; }
+.m-list { list-style: none; margin: 8px 0 12px; padding: 0; }
+.m-list li { display: flex; align-items: center; gap: 8px; padding: 8px 0; border-top: 1px solid var(--line); }
+.m-link { flex: 1; font-weight: 700; text-decoration: none; color: var(--text); word-break: break-word; }
+.m-del { width: 32px; height: 32px; }
+.m-form { display: grid; gap: 8px; margin-top: 8px; }
