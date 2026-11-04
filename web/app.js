@@ -788,7 +788,7 @@ async function initSync() {
     sb = makeClient(settings.sbUrl, settings.sbKey);
     const { data } = await sb.auth.getSession();
     sbUser = data.session?.user || null;
-    sb.auth.onAuthStateChange((_e, session) => { sbUser = session?.user || null; renderSyncBadge(); });
+    sb.auth.onAuthStateChange((_e, session) => { sbUser = session?.user || null; renderSyncBadge(); window.dispatchEvent(new Event('dp:auth')); });
     renderSyncBadge();
     if (sbUser) syncNow(); else if (carryOver()) commit();
   } catch (e) { setSync('err', e.message); if (carryOver()) commit(); }
@@ -800,7 +800,7 @@ function readCreds() {
   if (!email || pass.length < 6) throw new Error('Enter your email and a password (6+ characters).');
   settings.sbUrl = url; settings.sbKey = key; save(LS_SET, settings);
   sb = makeClient(url, key);
-  sb.auth.onAuthStateChange((_e, session) => { sbUser = session?.user || null; renderSyncBadge(); });
+  sb.auth.onAuthStateChange((_e, session) => { sbUser = session?.user || null; renderSyncBadge(); window.dispatchEvent(new Event('dp:auth')); });
   return { email, pass };
 }
 $('#sbSignIn').onclick = async () => {
@@ -838,6 +838,7 @@ async function syncNow(verbose) {
     settings.lastSync = now(); save(LS_SET, settings);
     setSync('ok', verbose ? 'Synced ✓' : undefined);
     if (changedLocal) { render(); pushSchedule(); } else renderSyncBadge();
+    window.dispatchEvent(new Event('dp:synced'));
   } catch (e) {
     const m = e.message || String(e);
     setSync('err', /relation .*planner|does not exist|schema cache/i.test(m) ? 'The “planner” table is missing — run supabase-setup.sql in your Supabase SQL editor.' : m);
@@ -897,5 +898,10 @@ checkAlarms();
 setInterval(checkAlarms, 5000);
 
 // test hook
-window.__dp = { get state() { return state; }, merge, periodKey, makeICS, checkAlarms, alerts: () => alerts };
+// add a planner task from the Launch view (linked by #cz:<id> in notes)
+function addPlanTask(o) {
+  const t = { id: uid(), done: false, createdAt: now(), title: o.title, date: o.date, end: o.end, targetId: o.targetId || '', notes: o.notes || '' };
+  upsertTask(t); toast('Planned for ' + fmtDate(t.date) + ' ' + fmtTime(t.end)); return t;
+}
+window.__dp = { get state() { return state; }, merge, periodKey, makeICS, checkAlarms, alerts: () => alerts, client: () => sb, user: () => sbUser, syncNow, addPlanTask };
 })();
