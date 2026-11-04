@@ -10,7 +10,7 @@ const save = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } cat
 
 let state = load(LS_STATE, null) || { tasks: [], targets: [], deleted: {} };
 state.tasks ||= []; state.targets ||= []; state.deleted ||= {};
-let settings = Object.assign({ before: 5, repeats: 3, volume: 0.8, sbUrl: '', sbKey: '', lastSync: 0 }, load(LS_SET, {}));
+let settings = Object.assign({ speak: true, before: 5, repeats: 3, volume: 0.8, sbUrl: '', sbKey: '', lastSync: 0 }, load(LS_SET, {}));
 // Vinu's Supabase project (public values — access is protected by row-level security)
 const SB_URL = 'https://zylefmxvyorgxjnklgtr.supabase.co';
 const SB_KEY = 'sb_publishable_QiFeAn5V7PBXDLkxMVkBag_q8PO7yoS';
@@ -163,6 +163,7 @@ function renderHero() {
   const part = h < 5 ? 'Up early' : h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening';
   const name = (settings.name || '').trim();
   $('#greet').textContent = `${part}${name ? ', ' + name : ''} ${h < 17 ? '☀️' : '🌙'}`;
+  $('#greet').title = 'Cosmi is with you';
   const all = tasksOn(selDay), live = all.filter(t => !t.failedAt), done = live.filter(t => t.done).length;
   const total = all.length, pct = total ? done / total : 0;
   let cheer;
@@ -336,9 +337,10 @@ function renderSettings() {
     $('#icsAll').closest('.btn-row').classList.add('hidden');
     $('#enableNotif').classList.remove('hidden'); $('#enableNotif').textContent = 'Allow alarms';
     $('#notifHint').textContent = 'Alarms ring as Android notifications with the tinker, even when the app is closed. Tap “Allow alarms” once, and allow “Alarms & reminders” if Android asks.';
-    $('#setRepeats').value = String(settings.repeats); $('#setVolume').value = String(settings.volume);
+    $('#setSpeak').checked = settings.speak !== false; $('#setRepeats').value = String(settings.repeats); $('#setVolume').value = String(settings.volume);
     return;
   }
+  $('#setSpeak').checked = settings.speak !== false;
   $('#setRepeats').value = String(settings.repeats);
   $('#setVolume').value = String(settings.volume);
   const hint = $('#notifHint'), btn = $('#enableNotif');
@@ -475,7 +477,8 @@ $('#setBefore').onchange = e => { settings.before = +e.target.value; save(LS_SET
 $('#setName').oninput = e => { settings.name = e.target.value.slice(0, 30); save(LS_SET, settings); renderHero(); };
 $('#setRepeats').onchange = e => { settings.repeats = +e.target.value; save(LS_SET, settings); };
 $('#setVolume').oninput = e => { settings.volume = +e.target.value; save(LS_SET, settings); };
-$('#testSound').onclick = () => playTinker(1);
+$('#testSound').onclick = () => { playTinker(1); setTimeout(() => cosmiSay('Cosmi here. Your alarm works.'), 900); };
+$('#setSpeak').onchange = e => { settings.speak = e.target.checked; save(LS_SET, settings); };
 $('#enableNotif').onclick = async () => {
   if (LN) {
     try { nativeReady = null; await nativeInit(); const ex = await LN.checkExactNotificationSetting?.(); if (ex && ex.exact_alarm !== 'granted') await LN.changeExactNotificationSetting(); } catch {}
@@ -546,6 +549,15 @@ async function playTinker(times) {
 }
 function stopTinker() { clearTimeout(ringTimer); ringTimer = null; }
 
+// ---------- Cosmi (the assistant's name, used in alarms, notifications and her voice) ----------
+function cosmiSay(text) {
+  try {
+    if (!settings.speak || !('speechSynthesis' in window)) return;
+    const u = new SpeechSynthesisUtterance(text); u.volume = Math.min(1, settings.volume || 0.8); u.rate = 1; u.pitch = 1.15;
+    speechSynthesis.cancel(); speechSynthesis.speak(u);
+  } catch {}
+}
+
 // ---------- alarms ----------
 let alarmQueue = [], alarmShowing = null;
 function notify(title, body, tag) {
@@ -572,8 +584,8 @@ function checkAlarms() {
       alerts.pre[t.id] = key; dirty = true;
       const mins = Math.max(1, Math.round((at - n) / 60000));
       window.desktop?.alarm({ title: t.title, kind: 'pre' });
-      notify(`⏳ ${t.title}`, `Ends in ${mins} min (${fmtTime(t.end)})`, 'pre-' + t.id);
-      toast(`⏳ “${t.title}” ends in ${mins} min`);
+      notify(`Cosmi ⏳ ${t.title}`, `Ends in ${mins} min (${fmtTime(t.end)})`, 'pre-' + t.id);
+      toast(`Cosmi: ⏳ “${t.title}” ends in ${mins} min`);
     }
     // end-time alert (ignore alarms more than 30 min stale, e.g. app opened next morning)
     if (alerts.fired[t.id] !== key && n >= at && n - at < 30 * 60000) {
@@ -590,14 +602,15 @@ function showAlarm(id) {
   const t = state.tasks.find(x => x.id === id);
   if (!t || t.done) { alarmShowing = null; if (alarmQueue.length) showAlarm(alarmQueue.shift()); return; }
   alarmShowing = id;
-  $('#alarmKind').textContent = t.extendedAt ? 'Hard deadline — mark done within 5 min or it fails' : alerts.snooze[id] ? 'Snooze over' : "Time's up";
+  $('#alarmKind').textContent = t.extendedAt ? 'Cosmi: hard deadline, mark done within 5 min or it fails' : alerts.snooze[id] ? 'Cosmi: snooze is over' : "Cosmi: time's up";
   $('#alarmTitle').textContent = t.title;
   $('#alarmTime').textContent = `End time ${fmtTime(t.end)}${t.extendedAt ? ' · hard deadline (already extended)' : ''}`;
   $('#alarmExtend').classList.toggle('hidden', !!t.extendedAt);
   $('#alarm').classList.remove('hidden');
   window.desktop?.alarm({ title: t.title, kind: 'end' });
-  notify(`🔔 ${t.title}`, `End time reached (${fmtTime(t.end)})`, 'end-' + t.id);
+  notify(`Cosmi 🔔 ${t.title}`, `End time reached (${fmtTime(t.end)})`, 'end-' + t.id);
   playTinker(settings.repeats);
+  setTimeout(() => cosmiSay(`Cosmi here. Time is up for ${t.title}.`), 1200);
 }
 function closeAlarm() {
   stopTinker(); $('#alarm').classList.add('hidden'); alarmShowing = null;

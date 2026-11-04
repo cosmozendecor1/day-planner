@@ -335,3 +335,4 @@ dialog.sheet h3 { margin: 0 0 6px; font-size: 22px; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
 }
+.cosmi-tag{margin-left:8px;font:700 11px var(--body);opacity:.85;background:rgba(255,255,255,.28);border-radius:999px;padding:2px 8px}
