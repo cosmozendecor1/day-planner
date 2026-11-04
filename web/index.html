@@ -16,6 +16,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Nunito:wght@400;600;700;800&display=swap">
 <link rel="stylesheet" href="styles.css">
+<link rel="stylesheet" href="launch.css">
 </head>
 <body>
 <header class="topbar">
@@ -102,6 +103,9 @@
     <button id="addTarget" class="primary-btn wide">+ Add target</button>
   </section>
 
+  <!-- LAUNCH BOARD (CosmoZen progress, same login) -->
+  <section id="view-launch" class="view"></section>
+
   <!-- SETTINGS -->
   <section id="view-settings" class="view">
     <div class="card">
@@ -178,6 +182,7 @@
 <nav class="tabbar">
   <button data-view="today" class="on"><span>☀️</span>Today</button>
   <button data-view="targets"><span>🎯</span>Targets</button>
+  <button data-view="launch"><span>🚀</span>Launch</button>
   <button data-view="settings"><span>⚙️</span>Settings</button>
 </nav>
 
@@ -226,6 +231,25 @@
   </form>
 </dialog>
 
+<!-- Launch task editor -->
+<dialog id="launchDlg" class="sheet">
+  <form id="launchForm" method="dialog">
+    <h3 id="lTitleH">Launch task</h3>
+    <label class="stack">Task<input id="lTitle" required maxlength="200"></label>
+    <label class="stack">Note<textarea id="lNote" rows="3" maxlength="1500"></textarea></label>
+    <div class="muted small">Status</div>
+    <div id="lStatus"><button type="button" data-s="done">Done</button><button type="button" data-s="wip">In progress</button><button type="button" data-s="blocked">Blocked</button></div>
+    <label class="stack">Group<select id="lGroup"></select></label>
+    <input id="lNewGroup" class="hidden" placeholder="New group name" maxlength="80">
+    <div class="btn-row spread">
+      <button type="button" id="lDelete" class="danger-btn">Delete</button>
+      <span class="grow"></span>
+      <button type="button" id="lCancel" class="ghost-btn">Cancel</button>
+      <button type="submit" class="primary-btn">Save</button>
+    </div>
+  </form>
+</dialog>
+
 <!-- Extend deadline -->
 <dialog id="extDlg" class="sheet">
   <form method="dialog" id="extForm">
@@ -266,5 +290,6 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.118.0/dist/umd/supabase.js"></script>
 <script>window.supabase || document.write('<script src="vendor/supabase.js"><\/script>')</script>
 <script src="app.js"></script>
+<script src="launch.js"></script>
 </body>
 </html>
