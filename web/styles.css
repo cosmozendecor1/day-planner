@@ -346,3 +346,4 @@ dialog.sheet h3 { margin: 0 0 6px; font-size: 22px; }
 .prio-tag { color: #ff5d8f; } .block-tag { color: #ff6b6b; }
 .flags { display: flex; gap: 16px; flex-wrap: wrap; margin: 4px 0 8px; font-weight: 700; }
 .flags label { display: flex; align-items: center; gap: 6px; }
+.stuck-tag { color: #f0a53a; }

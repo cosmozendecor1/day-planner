@@ -157,6 +157,51 @@ const CHEERS = [
   'Make today count. Your future self is cheering.',
   'Progress, not perfection.',
 ];
+const DAILY = [
+  "Every great brand started as a plan on a Thursday like this one.",
+  "Ship it small, then make it better. Done beats perfect.",
+  "One customer delighted is worth ten ideas admired.",
+  "Acrylic is cut once. Decide with confidence, then cut.",
+  "Tiny wins stack up. Stack one today.",
+  "CosmoZen won't build itself, but you will. Let's go.",
+  "The next task is the only one that matters right now.",
+  "Momentum is a habit. Start before you feel ready.",
+  "Make it beautiful, make it useful, make it yours.",
+  "Small, steady and stubborn beats big and occasional.",
+  "Today's boring task is next month's smooth launch.",
+  "Your future customers are waiting. Go finish something for them.",
+  "Clear one thing off the list and watch the rest feel lighter.",
+  "Be the founder you'd want to work for.",
+  "Quality is a thousand small decisions. Make a good one now.",
+  "Progress, not perfection. Tick one and smile.",
+  "Laser-sharp focus today: one task, then the next.",
+  "You're closer than you were yesterday. Keep going.",
+  "Do the hard one first. The day gets easier after it.",
+  "Good design is patient. So are good founders.",
+  "Make a promise to yourself, then keep it before lunch.",
+  "Fewer tabs, more finished tasks.",
+  "Every order starts with a conversation. Reply to one today.",
+  "Calm, clear and consistent wins the long game.",
+  "Doing it badly beats not doing it. Then polish.",
+  "Your wall art turns blank walls into stories. Be the storyteller.",
+  "Energy follows action. Take the first step.",
+  "Done is a feeling worth chasing. Chase it today.",
+  "A tidy list is a calm mind. Tick, tick, tick.",
+  "Launch weeks reward the people who show up daily. That's you.",
+  "Say it with a finished task, not a promise.",
+  "Look after the details and the brand looks after itself.",
+  "Make today a little better than yesterday for someone.",
+  "Courage is just starting while a little unsure.",
+  "Brick by brick, piece by piece, that's how a brand gets built.",
+  "Protect your focus. It's your most valuable material.",
+  "Finish what's in front of you. The next thing will find you.",
+  "You don't need more time. You need the next small step.",
+  "Think premium, act simple, deliver warm.",
+  "Start the task you've been avoiding. Five minutes is plenty.",
+  "Work like it's launch day, rest like it's Sunday.",
+  "Believe in the plan, adjust the details, keep moving.",
+];
+const dayOfYear = d => Math.floor((d - new Date(d.getFullYear(), 0, 0)) / 864e5);
 const DONE_CHEERS = ['Nice — done ✓', 'Boom! One more down 💥', 'Look at you go 🚀', 'Ticked! Keep the streak going ⚡', 'Done and dusted ✨', 'That felt good, right? 😄'];
 function renderHero() {
   const h = new Date().getHours();
@@ -169,9 +214,7 @@ function renderHero() {
   let cheer;
   if (!total) cheer = selDay === todayStr() ? 'A clean slate. Add the first task that makes today great.' : 'Nothing planned for this day yet.';
   else if (done === total) cheer = 'Day won! Everything is done 🎉';
-  else if (pct >= .5) cheer = `Over halfway there — ${total - done} to go. Keep rolling!`;
-  else if (done > 0) cheer = `Off to a great start. ${total - done} more and the day is yours.`;
-  else cheer = CHEERS[(parseYmd(selDay).getDate() + total) % CHEERS.length];
+  else cheer = DAILY[dayOfYear(parseYmd(selDay)) % DAILY.length];
   $('#cheer').textContent = cheer;
   $('#sunDone').textContent = done; $('#sunOf').innerHTML = `of ${total}<br>done`;
   const C = 2 * Math.PI * 38;
@@ -302,6 +345,7 @@ function renderToday() {
     else if (!t.done && due < 0) status = '<span class="late">missed</span>';
     if (t.done) status = `<span class="done-tag">✓ Completed${t.doneAt ? ' ' + fmtTime(hm(new Date(t.doneAt))) : ''}</span>`;
     if (t.carriedFrom && !t.done) status += `<span class="tag carry">↪ Moved from ${shortDate(t.carriedFrom)}</span>`;
+    if (t.carryCount >= 3 && !t.done) status += `<span class="tag stuck-tag">🪨 Rolled over ${t.carryCount} days: do it, move it or drop it</span>`;
     if (t.extendedAt && !t.done) status += `<span class="tag ext">⏱ Hard deadline · was ${fmtTime(t.origEnd)} ${shortDate(t.origDate)}</span>`;
     if (t.priority) status += '<span class="tag prio-tag">⚑ High priority</span>';
     if (t.blocked && !t.done) status += '<span class="tag block-tag">⛔ Blocked</span>';
@@ -559,12 +603,20 @@ async function playTinker(times) {
   go();
 }
 function stopTinker() { clearTimeout(ringTimer); ringTimer = null; }
+let voiceTimer = null;
+function stopVoice() { clearTimeout(voiceTimer); voiceTimer = null; try { speechSynthesis.cancel(); } catch {} }
 
 // ---------- Cosmi (the assistant's name, used in alarms, notifications and her voice) ----------
+function cosmiVoice() {
+  const vs = speechSynthesis.getVoices();
+  return vs.find(v => /en-IN/i.test(v.lang) && /female|heera|neerja|natural/i.test(v.name)) || vs.find(v => /en-IN/i.test(v.lang)) || vs.find(v => /en/i.test(v.lang) && /aria|jenny|zira|samantha|natural|female/i.test(v.name)) || vs.find(v => /^en/i.test(v.lang)) || null;
+}
+if ('speechSynthesis' in window) speechSynthesis.onvoiceschanged = () => {};
 function cosmiSay(text) {
   try {
     if (!settings.speak || !('speechSynthesis' in window)) return;
-    const u = new SpeechSynthesisUtterance(text); u.volume = Math.min(1, settings.volume || 0.8); u.rate = 1; u.pitch = 1.15;
+    const u = new SpeechSynthesisUtterance(text); u.volume = Math.min(1, settings.volume || 0.8); u.rate = .98; u.pitch = 1.1;
+    const v = cosmiVoice(); if (v) { u.voice = v; u.lang = v.lang; }
     speechSynthesis.cancel(); speechSynthesis.speak(u);
   } catch {}
 }
@@ -620,11 +672,15 @@ function showAlarm(id) {
   $('#alarm').classList.remove('hidden');
   window.desktop?.alarm({ title: t.title, kind: 'end' });
   notify(`Cosmi 🔔 ${t.title}`, `End time reached (${fmtTime(t.end)})`, 'end-' + t.id);
-  playTinker(settings.repeats);
-  setTimeout(() => cosmiSay(`Cosmi here. Time is up for ${t.title}.`), 1200);
+  if (settings.speak !== false && 'speechSynthesis' in window) {
+    // one soft chime, then Cosmi says it out loud, again every 14 s until dismissed (up to the repeat count)
+    playTinker(1);
+    const loop = k => { cosmiSay(`Cosmi here. Time is up for ${t.title}.`); if (k + 1 < Math.max(2, settings.repeats)) voiceTimer = setTimeout(() => loop(k + 1), 14000); };
+    voiceTimer = setTimeout(() => loop(0), 900);
+  } else playTinker(settings.repeats);
 }
 function closeAlarm() {
-  stopTinker(); $('#alarm').classList.add('hidden'); alarmShowing = null;
+  stopTinker(); stopVoice(); $('#alarm').classList.add('hidden'); alarmShowing = null;
   if (alarmQueue.length) setTimeout(() => showAlarm(alarmQueue.shift()), 400);
 }
 $('#alarmDone').onclick = () => {
