@@ -27,14 +27,10 @@ jobs:
           name: DayPlanner-windows
           path: |
             desktop/dist/*.exe
-      - name: Publish portable EXE to the website (download link)
+      - name: Publish portable EXE as a GitHub release (too big to commit)
         shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          mkdir -p web/download
-          cp desktop/dist/DayPlanner-Portable.exe web/download/DayPlanner-Portable.exe
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add web/download/DayPlanner-Portable.exe
-          git commit -m "Update Windows EXE [skip ci]" || exit 0
-          git pull --rebase origin main
-          git push
+          gh release delete windows-latest -y --cleanup-tag || true
+          gh release create windows-latest desktop/dist/DayPlanner-Portable.exe --title "Day Planner for Windows (latest)" --notes "Portable Windows app, built from main."
