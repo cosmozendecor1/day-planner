@@ -983,5 +983,70 @@ function addPlanTask(o) {
   const t = { id: uid(), done: false, createdAt: now(), title: o.title, date: o.date, end: o.end, targetId: o.targetId || '', notes: o.notes || '' };
   upsertTask(t); toast('Planned for ' + fmtDate(t.date) + ' ' + fmtTime(t.end)); return t;
 }
+
+// ---------- swipe on a task: right = done, left = move to the next day ----------
+(() => {
+  const list = $('#taskList'); let s = null, suppress = false;
+  list.addEventListener('pointerdown', e => {
+    const li = e.target.closest('li.task'); if (!li || e.button > 0) return;
+    s = { li, x: e.clientX, y: e.clientY, dx: 0, on: false, id: li.querySelector('[data-toggle]')?.dataset.toggle };
+  });
+  list.addEventListener('pointermove', e => {
+    if (!s) return;
+    const dx = e.clientX - s.x, dy = e.clientY - s.y;
+    if (!s.on) {
+      if (Math.abs(dx) > 12 && Math.abs(dx) > Math.abs(dy) * 1.5) { s.on = true; try { s.li.setPointerCapture(e.pointerId); } catch {} }
+      else { if (Math.abs(dy) > 12) s = null; return; }
+    }
+    s.dx = dx; s.li.style.transform = `translateX(${Math.max(-140, Math.min(140, dx))}px)`;
+    s.li.dataset.hint = dx > 0 ? '✓ Done' : '→ Tomorrow';
+    s.li.classList.toggle('sw-r', dx > 0); s.li.classList.toggle('sw-l', dx < 0);
+  });
+  const finish = () => {
+    if (!s) return;
+    const { li, dx, on, id } = s; s = null;
+    if (!on) return;
+    suppress = true; setTimeout(() => { suppress = false; }, 80);
+    li.style.transform = ''; li.classList.remove('sw-r', 'sw-l');
+    const t = state.tasks.find(x => x.id === id);
+    if (!t || t.failedAt || Math.abs(dx) < 90) return;
+    if (dx > 0) { t.done = !t.done; t.doneAt = t.done ? now() : null; upsertTask(t); if (t.done) celebrate(document.querySelector(`[data-toggle="${t.id}"]`)); }
+    else {
+      if (t.done) return;
+      if (t.extendedAt) { toast('Hard-deadline tasks cannot be moved'); return; }
+      t.date = addDays(t.date, 1); delete alerts.fired[t.id]; delete alerts.pre[t.id]; delete alerts.snooze[t.id]; save(LS_ALERT, alerts);
+      upsertTask(t); toast('Moved to ' + (t.date === addDays(todayStr(), 1) ? 'tomorrow' : fmtDate(t.date)));
+    }
+  };
+  list.addEventListener('pointerup', finish); list.addEventListener('pointercancel', finish);
+  list.addEventListener('click', e => { if (suppress) { e.stopPropagation(); e.preventDefault(); } }, true);
+})();
+
+// ---------- morning briefing (once a day, or tap the greeting) ----------
+function showBrief(auto) {
+  const t0 = todayStr();
+  const open = state.tasks.filter(t => !t.done && !t.failedAt && t.date === t0)
+    .sort((a, b) => (b.priority ? 1 : 0) - (a.priority ? 1 : 0) || a.end.localeCompare(b.end));
+  if (auto && !open.length) return;
+  const h = new Date().getHours(), name = (settings.name || '').trim();
+  $('#briefHi').textContent = `${h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening'}${name ? ', ' + name : ''}`;
+  $('#briefQuote').textContent = DAILY[dayOfYear(new Date()) % DAILY.length];
+  $('#briefList').innerHTML = open.length
+    ? '<h4>Your top ' + Math.min(3, open.length) + ' for today</h4><ol class="brief-list">' + open.slice(0, 3).map(t => `<li>${t.priority ? '⚑ ' : ''}${esc(t.title)} <span class="muted">· ${fmtTime(t.end)}</span></li>`).join('') + '</ol>'
+    : '<p>Nothing open today. Enjoy it, or add one thing that moves CosmoZen forward.</p>';
+  const stuck = state.tasks.filter(t => !t.done && !t.failedAt && (t.carryCount || 0) >= 3).length;
+  $('#briefStuck').textContent = stuck ? `🪨 ${stuck} task${stuck > 1 ? 's have' : ' has'} rolled over 3+ days. Do ${stuck > 1 ? 'them' : 'it'}, move ${stuck > 1 ? 'them' : 'it'} or drop ${stuck > 1 ? 'them' : 'it'}.` : '';
+  try { $('#briefDlg').showModal(); } catch {}
+  if (open.length) setTimeout(() => cosmiSay(`${$('#briefHi').textContent}. You have ${open.length} open task${open.length > 1 ? 's' : ''} today. First up: ${open[0].title}.`), 600);
+}
+$('#briefDlg').addEventListener('close', () => { try { speechSynthesis.cancel(); } catch {} });
+$('#greet').onclick = () => showBrief(false);
+setTimeout(() => {
+  try {
+    const k = 'dp.brief.v1', t0 = todayStr();
+    if (localStorage.getItem(k) === t0 || new Date().getHours() < 4) return;
+    localStorage.setItem(k, t0); showBrief(true);
+  } catch {}
+}, 3500);
 window.__dp = { get state() { return state; }, merge, periodKey, makeICS, checkAlarms, alerts: () => alerts, client: () => sb, user: () => sbUser, syncNow, addPlanTask };
 })();

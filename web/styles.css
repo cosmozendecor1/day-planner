@@ -347,3 +347,13 @@ dialog.sheet h3 { margin: 0 0 6px; font-size: 22px; }
 .flags { display: flex; gap: 16px; flex-wrap: wrap; margin: 4px 0 8px; font-weight: 700; }
 .flags label { display: flex; align-items: center; gap: 6px; }
 .stuck-tag { color: #f0a53a; }
+
+/* swipe + briefing */
+.task { position: relative; touch-action: pan-y; user-select: none; }
+.task.sw-r { background: #1f6f5c; } .task.sw-l { background: #8a5a14; }
+.task.sw-r > *, .task.sw-l > * { opacity: .2; }
+.task.sw-r::after, .task.sw-l::after { content: attr(data-hint); position: absolute; inset: 0; display: flex; align-items: center; padding: 0 20px; font-weight: 800; color: #fff; pointer-events: none; }
+.task.sw-r::after { justify-content: flex-start; } .task.sw-l::after { justify-content: flex-end; }
+#greet { cursor: pointer; }
+.brief-list { padding-left: 20px; margin: 6px 0 10px; display: grid; gap: 6px; font-weight: 700; }
+#briefDlg h4 { margin: 12px 0 0; }
