@@ -68,6 +68,7 @@
       <h2>Tasks</h2>
       <span id="dayProgress" class="muted"></span>
     </div>
+    <div id="taskFilter" class="tfilter" role="tablist"></div>
     <ul id="taskList" class="task-list"></ul>
     <div id="failedSection" class="hidden">
       <div class="list-head fail-head"><h2>✕ Failed <span id="failedCount" class="fail-count"></span></h2><span class="muted small">Hard deadline not met</span></div>
@@ -202,6 +203,7 @@
     </div>
     <label class="stack">Counts toward target<select id="tTarget"></select></label>
     <label class="stack">Notes<textarea id="tNotes" rows="2" maxlength="500"></textarea></label>
+    <div class="flags"><label><input type="checkbox" id="tPriority"> ⚑ High priority</label><label><input type="checkbox" id="tBlocked"> ⛔ Blocked</label></div>
     <div class="btn-row spread">
       <button type="button" id="tDone" class="primary-btn done-btn wide">✓ Mark done</button>
       <button type="button" id="tExtend" class="ghost-btn wide">⏱ Extend deadline (once)</button>

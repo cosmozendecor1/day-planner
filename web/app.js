@@ -224,6 +224,8 @@ function celebrate(fromEl) {
 const $ = s => document.querySelector(s);
 const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 let selDay = todayStr();
+let taskFilter = 'all';
+const FILTERS = [['all', 'All', t => true], ['prog', 'In progress', t => !t.done && !t.blocked], ['prio', 'High priority', t => !!t.priority], ['block', 'Blocked', t => !t.done && !!t.blocked], ['done', 'Done', t => t.done]];
 let selPeriod = 'week';
 let periodAnchor = todayStr();
 
@@ -290,7 +292,9 @@ function renderToday() {
   }).join('');
   $('#failedSection').classList.toggle('hidden', !failed.length);
   $('#failedCount').textContent = failed.length;
-  $('#taskList').innerHTML = list.map(t => {
+  $('#taskFilter').innerHTML = FILTERS.map(([k, label, fn]) => `<button data-f="${k}" class="${taskFilter === k ? 'on' : ''}">${label} <b>${list.filter(fn).length}</b></button>`).join('');
+  const fnShow = FILTERS.find(f => f[0] === taskFilter)[2];
+  $('#taskList').innerHTML = list.filter(fnShow).map(t => {
     const due = endTs(t) - n;
     const g = t.targetId && targetById(t.targetId);
     let status = '';
@@ -299,7 +303,9 @@ function renderToday() {
     if (t.done) status = `<span class="done-tag">✓ Completed${t.doneAt ? ' ' + fmtTime(hm(new Date(t.doneAt))) : ''}</span>`;
     if (t.carriedFrom && !t.done) status += `<span class="tag carry">↪ Moved from ${shortDate(t.carriedFrom)}</span>`;
     if (t.extendedAt && !t.done) status += `<span class="tag ext">⏱ Hard deadline · was ${fmtTime(t.origEnd)} ${shortDate(t.origDate)}</span>`;
-    return `<li class="task ${t.done ? 'done' : ''} ${!t.done && due < 0 ? 'overdue' : ''}">
+    if (t.priority) status += '<span class="tag prio-tag">⚑ High priority</span>';
+    if (t.blocked && !t.done) status += '<span class="tag block-tag">⛔ Blocked</span>';
+    return `<li class="task ${t.done ? 'done' : ''} ${!t.done && due < 0 ? 'overdue' : ''} ${t.priority ? 'prio' : ''}">
       <button class="check" data-toggle="${t.id}" aria-label="${t.done ? 'Mark not done' : 'Mark done'}">${t.done ? '✓' : ''}</button>
       <button class="t-body" data-edit="${t.id}">
         <div class="t-title">${esc(t.title)}</div>
@@ -309,6 +315,7 @@ function renderToday() {
     </li>`;
   }).join('');
   $('#emptyTasks').classList.toggle('hidden', all.length > 0);
+  if (all.length && !list.filter(fnShow).length) $('#taskList').innerHTML = '<li class="muted" style="padding:8px 4px">Nothing here for this filter.</li>';
   const done = list.filter(t => t.done).length;
   $('#dayProgress').textContent = all.length ? `${done}/${all.length} done${failed.length ? ` · ${failed.length} failed` : ''}` : '';
   $('#icsDay').classList.toggle('hidden', !!LN || !list.some(t => !t.done && endTs(t) > n));
@@ -369,6 +376,7 @@ function openTask(t) {
   if (t) $('#tEnd').value = t.end;
   else { const d = new Date(Date.now() + 3600e3); $('#tEnd').value = `${pad(d.getHours())}:00`; }
   $('#tNotes').value = t?.notes || '';
+  $('#tPriority').checked = !!t?.priority; $('#tBlocked').checked = !!t?.blocked;
   $('#tDelete').classList.toggle('hidden', !t);
   $('#tDone').classList.toggle('hidden', !t || !!t.failedAt);
   const locked = !!t?.extendedAt;
@@ -387,6 +395,7 @@ function fillTargetSelect(cur) {
   $('#tTarget').innerHTML = '<option value="">— None —</option>' +
     gs.map(g => `<option value="${g.id}" ${g.id === cur ? 'selected' : ''}>${P_NAME[g.period]}: ${esc(g.title)}</option>`).join('');
 }
+$('#taskFilter').addEventListener('click', e => { const b = e.target.closest('button[data-f]'); if (b) { taskFilter = b.dataset.f; render(); } });
 $('#tDate').addEventListener('change', () => fillTargetSelect($('#tTarget').value));
 $('#taskForm').addEventListener('submit', e => {
   e.preventDefault();
@@ -395,6 +404,8 @@ $('#taskForm').addEventListener('submit', e => {
   t.title = $('#tTitle').value.trim();
   t.date = $('#tDate').value; t.end = $('#tEnd').value;
   t.targetId = $('#tTarget').value; t.notes = $('#tNotes').value.trim();
+  t.priority = $('#tPriority').checked; t.blocked = $('#tBlocked').checked;
+  if (t.blocked && !t.blockedAt) t.blockedAt = now(); if (!t.blocked) delete t.blockedAt;
   if (!t.title) return;
   if (changedTime) { delete alerts.fired[t.id]; delete alerts.pre[t.id]; delete alerts.snooze[t.id]; save(LS_ALERT, alerts); }
   upsertTask(t); taskDlg.close();
