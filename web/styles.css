@@ -357,3 +357,4 @@ dialog.sheet h3 { margin: 0 0 6px; font-size: 22px; }
 #greet { cursor: pointer; }
 .brief-list { padding-left: 20px; margin: 6px 0 10px; display: grid; gap: 6px; font-weight: 700; }
 #briefDlg h4 { margin: 12px 0 0; }
+.soft-tag { background: #eef6ee; color: #3d6b3f; }

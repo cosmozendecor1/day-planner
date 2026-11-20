@@ -347,6 +347,7 @@ function renderToday() {
     if (t.carriedFrom && !t.done) status += `<span class="tag carry">↪ Moved from ${shortDate(t.carriedFrom)}</span>`;
     if (t.carryCount >= 3 && !t.done) status += `<span class="tag stuck-tag">🪨 Rolled over ${t.carryCount} days: do it, move it or drop it</span>`;
     if (t.extendedAt && !t.done) status += `<span class="tag ext">⏱ Hard deadline · was ${fmtTime(t.origEnd)} ${shortDate(t.origDate)}</span>`;
+    if (t.soft && !t.done && !t.extendedAt) status += `<span class="tag soft-tag">🌤 Aim by ${fmtTime(t.soft)}</span>`;
     if (t.priority) status += '<span class="tag prio-tag">⚑ High priority</span>';
     if (t.blocked && !t.done) status += '<span class="tag block-tag">⛔ Blocked</span>';
     return `<li class="task ${t.done ? 'done' : ''} ${!t.done && due < 0 ? 'overdue' : ''} ${t.priority ? 'prio' : ''}">
@@ -417,6 +418,7 @@ function openTask(t) {
   $('#taskDlgTitle').textContent = t ? 'Edit task' : 'New task';
   $('#tTitle').value = t?.title || '';
   $('#tDate').value = t?.date || selDay;
+  $('#tSoft').value = t?.soft || '';
   if (t) $('#tEnd').value = t.end;
   else { const d = new Date(Date.now() + 3600e3); $('#tEnd').value = `${pad(d.getHours())}:00`; }
   $('#tNotes').value = t?.notes || '';
@@ -425,7 +427,7 @@ function openTask(t) {
   $('#tDone').classList.toggle('hidden', !t || !!t.failedAt);
   const locked = !!t?.extendedAt;
   $('#tExtend').classList.toggle('hidden', !t || t.done || locked);
-  $('#tDate').disabled = locked; $('#tEnd').disabled = locked;
+  $('#tDate').disabled = locked; $('#tEnd').disabled = locked; $('#tSoft').disabled = locked;
   $('#tLocked').classList.toggle('hidden', !locked);
   if (t?.failedAt) $('#tLocked').textContent = `✕ Failed — the hard deadline (${fmtTime(t.end)}, ${shortDate(t.date)}) passed before it was done.`;
   else if (locked) $('#tLocked').textContent = `⏱ Hard deadline set (extended once from ${fmtTime(t.origEnd)}, ${shortDate(t.origDate)}). Date and time can't be changed again.`;
@@ -444,14 +446,17 @@ $('#tDate').addEventListener('change', () => fillTargetSelect($('#tTarget').valu
 $('#taskForm').addEventListener('submit', e => {
   e.preventDefault();
   const t = editingTask ? { ...editingTask } : { id: uid(), done: false, createdAt: now() };
-  const changedTime = !editingTask || editingTask.date !== $('#tDate').value || editingTask.end !== $('#tEnd').value;
+  const softV = $('#tSoft').value;
+  if (softV && softV >= $('#tEnd').value) { toast('Soft deadline must be earlier than the end time'); return; }
+  const changedTime = !editingTask || editingTask.date !== $('#tDate').value || editingTask.end !== $('#tEnd').value || (editingTask.soft || '') !== softV;
   t.title = $('#tTitle').value.trim();
   t.date = $('#tDate').value; t.end = $('#tEnd').value;
+  if (softV) t.soft = softV; else delete t.soft;
   t.targetId = $('#tTarget').value; t.notes = $('#tNotes').value.trim();
   t.priority = $('#tPriority').checked; t.blocked = $('#tBlocked').checked;
   if (t.blocked && !t.blockedAt) t.blockedAt = now(); if (!t.blocked) delete t.blockedAt;
   if (!t.title) return;
-  if (changedTime) { delete alerts.fired[t.id]; delete alerts.pre[t.id]; delete alerts.snooze[t.id]; save(LS_ALERT, alerts); }
+  if (changedTime) { delete alerts.fired[t.id]; delete alerts.pre[t.id]; delete alerts.snooze[t.id]; if (alerts.soft) delete alerts.soft[t.id]; save(LS_ALERT, alerts); }
   upsertTask(t); taskDlg.close();
   if (!editingTask) toast(`Tinker set for ${fmtTime(t.end)}`);
   if (t.date !== selDay) { selDay = t.date; render(); }
@@ -633,6 +638,7 @@ function notify(title, body, tag) {
   } catch {}
 }
 function triggerAt(t) { return alerts.snooze[t.id] || endTs(t); }
+const softTs = t => t.soft ? endTs({ date: t.date, end: t.soft }) : 0;
 
 function checkAlarms() {
   markFailures();
@@ -647,8 +653,21 @@ function checkAlarms() {
       alerts.pre[t.id] = key; dirty = true;
       const mins = Math.max(1, Math.round((at - n) / 60000));
       window.desktop?.alarm({ title: t.title, kind: 'pre' });
-      notify(`Cosmi ⏳ ${t.title}`, `Ends in ${mins} min (${fmtTime(t.end)})`, 'pre-' + t.id);
+      if (!window.desktop) notify(`Cosmi ⏳ ${t.title}`, `Ends in ${mins} min (${fmtTime(t.end)})`, 'pre-' + t.id);
       toast(`Cosmi: ⏳ “${t.title}” ends in ${mins} min`);
+    }
+    // soft deadline: a gentle nudge only (taskbar blink, quiet voice), no popup, no penalty
+    const st = softTs(t);
+    if (st && !t.extendedAt) {
+      alerts.soft ||= {};
+      const sk = t.id + '@' + st;
+      if (alerts.soft[t.id] !== sk && n >= st && n < endTs(t) && n - st < 30 * 60000) {
+        alerts.soft[t.id] = sk; dirty = true;
+        window.desktop?.alarm({ title: t.title, kind: 'soft' });
+        toast(`Cosmi: gentle nudge, aim-by time for “${t.title}” reached. It is due at ${fmtTime(t.end)}.`);
+        if (settings.speak !== false) cosmiSay(`Gentle nudge. ${t.title}. Aim was to finish by now.`);
+        if (!window.desktop) notify(`Cosmi 🌤 ${t.title}`, `Aim-by time reached. Due ${fmtTime(t.end)}`, 'soft-' + t.id);
+      }
     }
     // end-time alert (ignore alarms more than 30 min stale, e.g. app opened next morning)
     if (alerts.fired[t.id] !== key && n >= at && n - at < 30 * 60000) {
@@ -670,8 +689,9 @@ function showAlarm(id) {
   $('#alarmTime').textContent = `End time ${fmtTime(t.end)}${t.extendedAt ? ' · hard deadline (already extended)' : ''}`;
   $('#alarmExtend').classList.toggle('hidden', !!t.extendedAt);
   $('#alarm').classList.remove('hidden');
-  window.desktop?.alarm({ title: t.title, kind: 'end' });
-  notify(`Cosmi 🔔 ${t.title}`, `End time reached (${fmtTime(t.end)})`, 'end-' + t.id);
+  const wasSnoozed = !!alerts.snooze[id];
+  window.desktop?.alarm({ title: t.title, kind: 'end', snoozed: wasSnoozed });
+  if (!window.desktop || !wasSnoozed) notify(`Cosmi 🔔 ${t.title}`, `End time reached (${fmtTime(t.end)})`, 'end-' + t.id);
   if (settings.speak !== false && 'speechSynthesis' in window) {
     // one soft chime, then Cosmi says it out loud, again every 14 s until dismissed (up to the repeat count)
     playTinker(1);
@@ -716,7 +736,7 @@ $('#extForm').addEventListener('submit', e => {
   const at = endTs({ date: nd, end: ne });
   if (!nd || !ne || at <= now() || at <= endTs(t)) { $('#extErr').textContent = 'Choose a time later than now and later than the current deadline.'; return; }
   if (!confirm(`Set the hard deadline to ${fmtTime(ne)}, ${shortDate(nd)}? You won't be able to extend this task again.`)) return;
-  t.origDate = t.date; t.origEnd = t.end; t.extendedAt = now();
+  t.origDate = t.date; t.origEnd = t.end; t.extendedAt = now(); delete t.soft;
   t.date = nd; t.end = ne;
   delete alerts.fired[t.id]; delete alerts.pre[t.id]; delete alerts.snooze[t.id]; save(LS_ALERT, alerts);
   upsertTask(t); extDlg.close(); taskDlg.open && taskDlg.close();
@@ -759,6 +779,8 @@ function nativeSchedule() {
         const at = triggerAt(t); if (at <= n || list.length >= 60) continue;
         const id = hashId(t.id);
         list.push({ id, title: `🔔 ${t.title}`, body: `End time reached (${fmtTime(t.end)})`, channelId: 'tinker', sound: 'tinker.wav', schedule: { at: new Date(at), allowWhileIdle: true } });
+        const sft = t.extendedAt ? 0 : softTs(t);
+        if (sft > n && !alerts.snooze[t.id]) list.push({ id: id + 3, title: `🌤 ${t.title}`, body: `Aim-by time reached. Due ${fmtTime(t.end)}`, channelId: 'tinker', schedule: { at: new Date(sft), allowWhileIdle: true } });
         if (before > 0 && at - before > n) list.push({ id: id + 1, title: `⏳ ${t.title}`, body: `Ends in ${settings.before} min (${fmtTime(t.end)})`, channelId: 'tinker', sound: 'tinker.wav', schedule: { at: new Date(at - before), allowWhileIdle: true } });
       }
       if (list.length) await LN.schedule({ notifications: list });
@@ -770,7 +792,7 @@ function pushSchedule() {
   nativeSchedule();
   if (!window.desktop?.schedule) return;
   const n = now(), before = settings.before * 60000;
-  const items = state.tasks.filter(t => !t.done).map(t => ({ id: t.id, title: t.title, at: triggerAt(t), before }))
+  const items = state.tasks.filter(t => !t.done).map(t => ({ id: t.id, title: t.title, at: triggerAt(t), before, snooze: !!alerts.snooze[t.id], soft: t.extendedAt ? 0 : softTs(t) }))
     .filter(x => x.at > n - 60000);
   window.desktop.schedule(items);
 }

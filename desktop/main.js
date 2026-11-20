@@ -86,7 +86,15 @@ function popUp() {
   setTimeout(() => { if (win && !win.isDestroyed()) { win.setAlwaysOnTop(false); win.flashFrame(false); } }, 10000);
 }
 
-ipcMain.on('alarm', () => popUp());
+// Gentle alert: blink the taskbar button only. Never steals focus or covers what you are doing.
+function blink() {
+  if (!win || win.isDestroyed()) return;
+  if (!win.isVisible()) { win.showInactive(); win.minimize(); }
+  win.flashFrame(true); // keeps blinking until you open the window
+}
+
+// Only the first end-time alarm may pop over everything. Snooze repeats, pre-alerts and soft nudges just blink.
+ipcMain.on('alarm', (_e, info) => { if (info && info.kind === 'end' && !info.snoozed) popUp(); else blink(); });
 
 // Renderer sends the upcoming list; main keeps its own timers so the window
 // wakes even if the renderer is hidden.
@@ -94,10 +102,11 @@ ipcMain.on('schedule', (_e, items) => {
   timers.forEach(clearTimeout); timers = [];
   const now = Date.now(), MAX = 2 ** 31 - 1;
   for (const it of items || []) {
-    for (const at of [it.before > 0 ? it.at - it.before : null, it.at]) {
+    const marks = [[it.before > 0 ? it.at - it.before : null, false], [it.soft || null, false], [it.at, !it.snooze]];
+    for (const [at, full] of marks) {
       if (at == null) continue;
       const d = at - now;
-      if (d > 0 && d < MAX) timers.push(setTimeout(() => { popUp(); win?.webContents.send('alarm-tick'); }, d + 300));
+      if (d > 0 && d < MAX) timers.push(setTimeout(() => { if (full) popUp(); else blink(); win?.webContents.send('alarm-tick'); }, d + 300));
     }
   }
 });
